@@ -195,8 +195,9 @@ function fitCanvas(cv) { const r = cv.getBoundingClientRect(), s = Math.min(2, w
 function bounds(X, n) { let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity; for (let i = 0; i < n; i++) { const x = X[2 * i], y = X[2 * i + 1]; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; } const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, half = Math.max(x1 - x0, y1 - y0) / 2 * 1.04; return { cx, cy, half }; }
 function pointsLayer(X, n, w, h, b, color) { const off = document.createElement("canvas"); off.width = w; off.height = h; const g = off.getContext("2d"); g.fillStyle = color; g.globalAlpha = n > 60000 ? 0.35 : 0.55; const s = w / (2 * b.half), step = Math.max(1, Math.floor(n / 60000));
   for (let i = 0; i < n; i += step) { const px = (X[2 * i] - b.cx) * s + w / 2, py = h / 2 - (X[2 * i + 1] - b.cy) * s; g.fillRect(px, py, 1.2, 1.2); } return off; }
-function drawPanel(cv, layer, C, K, b, color) { const g = cv.getContext("2d"), w = cv.width, h = cv.height; g.clearRect(0, 0, w, h); g.drawImage(layer, 0, 0); const s = w / (2 * b.half), r = K > 3000 ? 1.4 : K > 1000 ? 2 : 3; g.fillStyle = color;
-  for (let j = 0; j < K; j++) { const px = (C[2 * j] - b.cx) * s + w / 2, py = h / 2 - (C[2 * j + 1] - b.cy) * s; g.beginPath(); g.arc(px, py, r, 0, 6.2832); g.fill(); } }
+function drawPanel(cv, layer, C, K, b, color) { const g = cv.getContext("2d"), w = cv.width, h = cv.height; g.clearRect(0, 0, w, h); g.drawImage(layer, 0, 0); const s = w / (2 * b.half), r = K > 3000 ? 1.4 : K > 1000 ? 2 : 2.6, halo = K <= 3000;  // a white rim keeps packed centroids countable instead of merging into a solid disk
+  g.fillStyle = color; g.strokeStyle = "#fff"; g.lineWidth = 1;
+  for (let j = 0; j < K; j++) { const px = (C[2 * j] - b.cx) * s + w / 2, py = h / 2 - (C[2 * j + 1] - b.cy) * s; g.beginPath(); g.arc(px, py, r, 0, 6.2832); g.fill(); if (halo) g.stroke(); } }
 
 function drawChart(cv, series, xMax) { const g = cv.getContext("2d"), w = cv.width, h = cv.height, s = Math.min(2, window.devicePixelRatio || 1); g.clearRect(0, 0, w, h);
   const L = 62 * s, R = 14 * s, Tp = 12 * s, Bt = 34 * s; let lo = Infinity, hi = -Infinity;

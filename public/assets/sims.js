@@ -21,7 +21,7 @@ function raceSim(cfg) {
     const X = flatten(Array.from(idx.subarray(0, n)).map((i) => rows[i])), Xt = flatten(Array.from(idx.subarray(n)).map((i) => rows[i])); const b = bounds(X, n);
     cvs.forEach(fitCanvas); const layer = pointsLayer(X, n, cvs[0].width, cvs[0].height, b, css("--muted"));
     const r = { cancelled: false, X, Xt, nTest, n, K, b, layer, ops: new Array(M).fill(0), cpu: new Array(M).fill(0), trainers: make(X, n, K, seed), colors: cfg.trainers.map((t) => css(t.color)) };
-    run = r; head.textContent = "Training…"; note.textContent = `n = ${fmtInt(n)}, k = ${fmtInt(K)} (${(n / K).toFixed(0)} points per cluster), ${cfg.fixedData ? "start" : "seed"} ${seed}`; raf = requestAnimationFrame(() => tick(r)); }
+    run = r; (window.__sims = window.__sims || {})[cfg.root] = r; head.textContent = "Training…"; note.textContent = `n = ${fmtInt(n)}, k = ${fmtInt(K)} (${(n / K).toFixed(0)} points per cluster), ${cfg.fixedData ? "start" : "seed"} ${seed}`; raf = requestAnimationFrame(() => tick(r)); }
   function draw(r) { const nk = r.n * r.K; r.trainers.forEach((t, m) => { drawPanel(cvs[m], r.layer, t.C, r.K, r.b, r.colors[m]); sts[m].innerHTML = `k = ${fmtInt(r.K)} centroids · ${(r.ops[m] / nk).toFixed(2)} passes of n·k · ${t.label}${cfg.extra ? cfg.extra(t, m) : ""}`; }); }
   function tick(r) { if (r.cancelled) return; const t0 = performance.now(); const nk = r.n * r.K, goal = (m) => r.ops[m] / nk / denom(m);
     while (performance.now() - t0 < 14) { let m = -1; for (let q = 0; q < M; q++) { if (r.trainers[q].done) continue; if (m < 0 || goal(q) < goal(m)) m = q; } if (m < 0) break; const s = performance.now(); r.ops[m] += r.trainers[m].step(); r.cpu[m] += performance.now() - s; }
