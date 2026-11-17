@@ -16,6 +16,7 @@ const page = await browser.newPage();
 await page.setViewport({ width: 1180, height: 1000, deviceScaleFactor: 1 });
 await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
 await page.waitForSelector("#sim-hero .headline");
+await page.evaluate(() => { document.querySelector("#sim-hero .chk input").checked = true; });  // record with the Voronoi cells on
 await page.evaluate(() => {
   const W = 1200, P = 380, G = 30, TOP = 44, H = TOP + P + 70;
   const off = document.createElement("canvas"); off.width = W; off.height = H; const g = off.getContext("2d");

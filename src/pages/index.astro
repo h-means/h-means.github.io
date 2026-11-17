@@ -176,7 +176,7 @@ EMeans(n_clusters=4096, n_passes=5).fit(X)`}</code></pre>
     const E = { name: "e-means", color: "--emeans", make: (X, n, K, T, s) => new EmeansTrainer(X, n, K, T, s, false) };
     const H = { name: "h-means", color: "--hmeans", make: (X, n, K, T, s) => new HmeansTrainer(X, n, K, T, s) };
     const vs = (a, b) => `<b>${pctBetter(a, b)}%</b>`;
-    raceSim({ root: "sim-hero", gen: "vo_toy", n: 40000, K: 800, T: 5, iters: 25, trainers: [L, Object.assign({}, E, { name: "e-means, 5 passes" }), Object.assign({}, H, { name: "h-means, 5 passes" })],
+    raceSim({ root: "sim-hero", gen: "vo_toy", n: 40000, K: 800, T: 5, iters: 25, voronoi: true, trainers: [L, Object.assign({}, E, { name: "e-means, 5 passes" }), Object.assign({}, H, { name: "h-means, 5 passes" })],
       summary: (tr, te, r, v) => `h-means: ${vs(tr[2], tr[1])} lower train loss and ${vs(te[2], te[1])} lower held-out loss than <span class="e">e-means</span> at the same ${v.T} passes, ${pctBetter(tr[2], tr[0])}% lower than <span class="l">Lloyd</span> after ${v.iters} iterations.` });
     raceSim({ root: "sim-voronoi", gen: "vo_toy", n: 10000, K: 40, T: 5, iters: 25, voronoi: true, trainers: [L, Object.assign({}, E, { name: "e-means, 5 passes" }), Object.assign({}, H, { name: "h-means, 5 passes" })],
       summary: (tr, te, r, v) => `h-means: ${vs(tr[2], tr[1])} lower train loss than <span class="e">e-means</span> and ${pctBetter(tr[2], tr[0])}% lower than <span class="l">Lloyd</span> with k = ${r.K}.` });

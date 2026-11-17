@@ -214,8 +214,10 @@ function voronoiLayer(C, K, b, w, h, color) {
     const a = edge ? 0.55 : 0.04 + 0.3 * Math.min(1, area[j] / (6 * mean)); d[4 * p] = rgb[0]; d[4 * p + 1] = rgb[1]; d[4 * p + 2] = rgb[2]; d[4 * p + 3] = Math.round(255 * a); }
   off.getContext("2d").putImageData(img, 0, 0); return off; }
 function parseColor(c) { const g = document.createElement("canvas").getContext("2d"); g.fillStyle = c; const h = g.fillStyle; return [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16)); }
-function drawPanel(cv, layer, C, K, b, color, voronoi) { const g = cv.getContext("2d"), w = cv.width, h = cv.height; g.clearRect(0, 0, w, h);
-  if (voronoi) { const v = voronoiLayer(C, K, b, w, h, color); g.imageSmoothingEnabled = true; g.drawImage(v, 0, 0, w, h); }
+// voronoi: draw the cells; while a run is animating they are recomputed at most every 150 ms (cached on the
+// canvas), and always when final is true, so the last frame is exact.
+function drawPanel(cv, layer, C, K, b, color, voronoi, final = true) { const g = cv.getContext("2d"), w = cv.width, h = cv.height; g.clearRect(0, 0, w, h);
+  if (voronoi) { const now = performance.now(), c = cv._vor; const v = (!final && c && c.w === w && c.h === h && now - c.t < 150) ? c.layer : voronoiLayer(C, K, b, w, h, color); cv._vor = { layer: v, t: v === (c && c.layer) ? c.t : now, w, h }; g.imageSmoothingEnabled = true; g.drawImage(v, 0, 0, w, h); }
   g.drawImage(layer, 0, 0); const s = w / (2 * b.half), r = K > 3000 ? 1.4 : K > 1000 ? 2 : K > 200 ? 2.6 : 3.5, halo = K <= 3000;  // a white rim keeps packed centroids countable instead of merging into a solid disk
   g.fillStyle = color; g.strokeStyle = "#fff"; g.lineWidth = 1;
   for (let j = 0; j < K; j++) { const px = (C[2 * j] - b.cx) * s + w / 2, py = h / 2 - (C[2 * j + 1] - b.cy) * s; g.beginPath(); g.arc(px, py, r, 0, 6.2832); g.fill(); if (halo) g.stroke(); } }
