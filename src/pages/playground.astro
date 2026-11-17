@@ -1,0 +1,123 @@
+---
+import Base from "../layouts/Base.astro";
+---
+<Base title="h-means playground" description="Lloyd, e-means and h-means on the same 2-D points, compared at equal distance computations." page="playground">
+  <section class="hero" style="padding-bottom: 0">
+    <p class="eyebrow">Playground</p>
+    <h1>Playground</h1>
+    <p class="lede">Lloyd's algorithm, e-means and h-means run on the same 2-D points from the same random initial rows. The x axis counts distance computations in units of one pass over the data (n·k), which makes the comparison independent of hardware. Lower loss is better.</p>
+  </section>
+
+  <div class="controls" style="margin-top: 22px">
+    <div class="ctl"><label for="shape">Shape</label>
+      <select id="shape">
+        <option value="vo_toy">3 Gaussians</option>
+        <option value="syn_gmm_zipf">Gaussian mixture, Zipf-weighted</option>
+        <option value="gaussian_blobs">Gaussian blobs</option>
+        <option value="anisotropic_blobs">Anisotropic blobs</option>
+        <option value="moons_tiled">Interleaving moons</option>
+        <option value="rings">Concentric rings</option>
+        <option value="spirals">Spirals</option>
+        <option value="galaxy">Galaxy</option>
+        <option value="flower">Flower</option>
+        <option value="checkerboard">Checkerboard</option>
+        <option value="heart">Heart</option>
+        <option value="star">Star outline</option>
+        <option value="syn_unif_cube">Uniform square</option>
+      </select></div>
+    <div class="ctl"><label for="n">n (points)</label><input type="range" id="n" min="0" max="100" value="60" /><span class="val" id="nVal">100,000</span></div>
+    <div class="ctl"><label for="k">clusters k</label><input type="range" id="k" min="0" max="100" value="65" /><span class="val" id="kVal">2,000</span></div>
+    <div class="ctl"><label for="passes">e-means / h-means passes</label><input type="range" id="passes" min="2" max="25" value="5" /><span class="val" id="passesVal">5</span></div>
+    <div class="ctl"><label for="lloyd">Lloyd iterations</label><input type="range" id="lloyd" min="5" max="50" value="25" /><span class="val" id="lloydVal">25</span></div>
+    <div class="ctl"><label for="seed">Seed</label><input type="number" id="seed" value="0" min="0" max="9999" style="width:6ch" /></div>
+    <div class="ctl"><label for="speed">Speed</label><input type="range" id="speed" min="1" max="4" value="2" /><span class="val" id="speedVal">live</span></div>
+    <button class="btn" id="train">Train</button>
+  </div>
+
+  <div class="progress" style="margin-top: 14px">
+    <div class="bar"><div id="barFill"></div></div>
+    <div class="status" id="status">ready</div>
+  </div>
+
+  <div class="panelgrid" style="margin-top: 14px">
+    <div class="panel"><h3><span class="dot" style="background: var(--lloyd)"></span>Lloyd k-means</h3><canvas id="cvL" width="480" height="480"></canvas><div class="stat" id="stL"></div></div>
+    <div class="panel"><h3><span class="dot" style="background: var(--emeans)"></span>e-means</h3><canvas id="cvE" width="480" height="480"></canvas><div class="stat" id="stE"></div></div>
+    <div class="panel"><h3><span class="dot" style="background: var(--hmeans)"></span>h-means</h3><canvas id="cvH" width="480" height="480"></canvas><div class="stat" id="stH"></div></div>
+    <div class="panel chart"><h3>Loss (MSE) against passes over the data</h3><canvas id="cvC" width="1200" height="460"></canvas>
+      <div class="legend"><span class="l">Lloyd</span><span class="e">e-means</span><span class="h">h-means</span><span class="muted">solid: train &nbsp; dashed: held-out</span></div></div>
+  </div>
+
+  <p class="headline" id="headline">Press Train to start.</p>
+
+  <div class="muted small" style="max-width: 76ch">
+    <p id="recipe"></p>
+    <p>What runs: Lloyd re-seeds empty clusters by splitting. e-means uses its published laws with the batch law's quality setting (B/8) and, as in the authors' playground, no dead-cluster revival on 2-D data. h-means seeds with a half pass over k/16 coarse centroids, splits each coarse cluster into children in proportion to its loss, runs e-means passes whose assignment uses Hartigan's rule with the EMA mass as the cluster size, and finishes with exact Hartigan passes. Held-out loss uses 20% extra points drawn from the same shape. Everything runs in this tab, single-threaded; the JavaScript port was cross-checked against the Python reference on the same distributions (within 4%).</p>
+    <p>Two dimensions are the regime the e-means authors flag as outside their fitted laws (dead-cluster revival is switched off at d ≤ 2), which is why the gap here is far larger than on real embeddings. The <a href="/results">results page</a> has the numbers that matter: SIFT, GloVe, NYTimes, Fashion-MNIST, Deep-10M.</p>
+  </div>
+
+  <script is:inline src="/assets/core.js"></script>
+  <script is:inline>
+const $ = id => document.getElementById(id);
+const nFromSlider = v => Math.round(Math.pow(10, 4 + 1.7 * v / 100) / 1000) * 1000;   // 10k .. 500k, 60 -> 100k
+const kFromSlider = v => { const raw = Math.pow(10, 2 + 2 * v / 100); const step = raw < 1000 ? 50 : raw < 5000 ? 250 : 500; return Math.max(100, Math.round(raw / step) * step); };
+const speedNames = { 1: "slow", 2: "live", 3: "fast", 4: "max" };
+function syncLabels() { $("nVal").textContent = fmtInt(nFromSlider(+$("n").value)); $("kVal").textContent = fmtInt(kFromSlider(+$("k").value)); $("passesVal").textContent = $("passes").value; $("lloydVal").textContent = $("lloyd").value; $("speedVal").textContent = speedNames[$("speed").value]; }
+for (const id of ["n", "k", "passes", "lloyd", "speed"]) $(id).addEventListener("input", syncLabels);
+syncLabels();
+
+let run = null, raf = 0;
+
+function startRun() {
+  if (run) { run.cancelled = true; cancelAnimationFrame(raf); }
+  const shape = $("shape").value, n = nFromSlider(+$("n").value), K = kFromSlider(+$("k").value), T = +$("passes").value, iters = +$("lloyd").value, seed = +$("seed").value;
+  $("status").textContent = "generating data";
+  const nTest = Math.max(2000, Math.round(0.2 * n)); const rows = GEN[shape](n + nTest, K, seed); const idx = shuffledIndices(mulberry32(seed + 1), rows.length);
+  const X = flatten(idx.subarray ? Array.from(idx.subarray(0, n)).map(i => rows[i]) : []), Xt = flatten(Array.from(idx.subarray(n)).map(i => rows[i]));
+  const b = bounds(X, n); const dims = [$("cvL"), $("cvE"), $("cvH")].map(fitCanvas); fitCanvas($("cvC"));
+  const layer = pointsLayer(X, n, $("cvL").width, $("cvL").height, b, css("--muted"));
+  const r = { cancelled: false, n, K, T, iters, X, Xt, nTest, b, layer, ops: [0, 0, 0], curves: [[], [], []], tcurves: [[], [], []], nextEval: [0, 0, 0], evalEvery: 0.25,
+    trainers: [new LloydTrainer(X, n, K, iters, seed), new EmeansTrainer(X, n, K, T, seed, false), new HmeansTrainer(X, n, K, T, seed)], colors: [css("--lloyd"), css("--emeans"), css("--hmeans")], t0: performance.now(), cpu: [0, 0, 0], sub: Math.min(n, 25000) };
+  run = r;
+  $("recipe").innerHTML = `n = ${fmtInt(n)} training points (+${fmtInt(nTest)} held out), d = 2, k = ${fmtInt(K)} (${(n / K).toFixed(0)} points per cluster). e-means: batch ${fmtInt(r.trainers[1].B)}, peak step ${r.trainers[1].a0.toFixed(3)}, ${T} passes. h-means: ${r.trainers[2].kc} coarse centroids, ${r.trainers[2].Tema} EMA pass${r.trainers[2].Tema > 1 ? "es" : ""} (batch ${fmtInt(valleyBatch(K, r.trainers[2].Tema, n))}) + ${r.trainers[2].Ttail} Hartigan pass${r.trainers[2].Ttail === 1 ? "" : "es"}. Lloyd: ${iters} iterations.`;
+  $("headline").textContent = "Training…"; $("train").textContent = "Restart";
+  evalAll(r, true); drawAll(r); raf = requestAnimationFrame(() => tick(r));
+}
+function evalAll(r, force) { const nk = r.n * r.K; for (let m = 0; m < 3; m++) { const p = r.ops[m] / nk, tr = r.trainers[m]; if (!force && p < r.nextEval[m] && !tr.done) continue; if (!force && tr.done && r.curves[m].length && r.curves[m][r.curves[m].length - 1].final) continue;
+    const train = meanLoss(r.X, r.sub, tr.C, r.K), test = meanLoss(r.Xt, r.nTest, tr.C, r.K); r.curves[m].push({ x: p, y: train, final: tr.done }); r.tcurves[m].push({ x: p, y: test }); r.nextEval[m] = Math.floor(p / r.evalEvery) * r.evalEvery + r.evalEvery; } }
+function drawAll(r) { const cvs = [$("cvL"), $("cvE"), $("cvH")], sts = [$("stL"), $("stE"), $("stH")]; const nk = r.n * r.K;
+  for (let m = 0; m < 3; m++) { drawPanel(cvs[m], r.layer, r.trainers[m].C, r.K, r.b, r.colors[m]); const c = r.curves[m], t = r.tcurves[m]; const lab = m === 0 ? r.trainers[0].label : m === 1 ? `pass ${Math.min(r.T, Math.floor(r.trainers[1].progress) + (r.trainers[1].done ? 0 : 1))} / ${r.T}` : r.trainers[2].label;
+    sts[m].innerHTML = c.length ? `train <b>${c[c.length - 1].y.toPrecision(4)}</b> · held-out <b>${t[t.length - 1].y.toPrecision(4)}</b><br>${(r.ops[m] / nk).toFixed(2)} passes of n·k · ${lab} · ${(r.cpu[m] / 1000).toFixed(1)} s` : ""; }
+  const xMax = Math.max(r.iters, r.T + 0.5); const series = [];
+  for (let m = 0; m < 3; m++) { series.push({ pts: r.curves[m], color: r.colors[m], dashed: false }); series.push({ pts: r.tcurves[m], color: r.colors[m], dashed: true }); }
+  drawChart($("cvC"), series, xMax);
+  const prog = Math.min(1, r.trainers.reduce((a, t, i) => a + Math.min(1, t.progress / (i === 0 ? r.iters : r.T)), 0) / 3); $("barFill").style.width = (prog * 100).toFixed(1) + "%"; }
+function tick(r) { if (r.cancelled) return; const speed = +$("speed").value; const budget = speed === 1 ? 4 : speed === 2 ? 12 : speed === 3 ? 40 : 200; const t0 = performance.now(); let any = false;
+  // fair pacing: each step goes to the method that has spent the fewest distance computations so far, so the
+  // three advance together along the x axis (a step is one Lloyd chunk, one e-means batch or one h-means batch,
+  // which differ in cost by orders of magnitude).
+  const nk = r.n * r.K, goal = (m) => r.ops[m] / nk / (m === 0 ? r.iters : r.T);
+  while (performance.now() - t0 < budget) { let m = -1; for (let q = 0; q < 3; q++) { if (r.trainers[q].done) continue; if (m < 0 || goal(q) < goal(m)) m = q; } if (m < 0) break;
+    const s = performance.now(); r.ops[m] += r.trainers[m].step(); r.cpu[m] += performance.now() - s; any = true; if (speed === 1) break; }
+  evalAll(r, false); drawAll(r);
+  const done = r.trainers.every(t => t.done);
+  $("status").textContent = done ? `done in ${((performance.now() - r.t0) / 1000).toFixed(1)} s` : `running… ${((performance.now() - r.t0) / 1000).toFixed(0)} s`;
+  if (!done) { raf = requestAnimationFrame(() => tick(r)); return; }
+  finish(r); }
+function finish(r) { // final exact numbers on the full training set
+  const tr = r.trainers.map(t => meanLoss(r.X, r.n, t.C, r.K)), te = r.tcurves.map(c => c[c.length - 1].y);
+  const pct = (a, b) => ((1 - a / b) * 100).toFixed(1);
+  // passes h-means needed to reach e-means's final train loss (on the subsample curve)
+  const target = r.curves[1][r.curves[1].length - 1].y; let reach = null; for (const p of r.curves[2]) if (p.y <= target) { reach = p.x; break; }
+  const reachTxt = reach === null ? "" : ` h-means reached e-means's final loss after <b>${reach.toFixed(2)} passes</b> (e-means used ${r.T}).`;
+  $("headline").innerHTML = `h-means: <b>${pct(tr[2], tr[1])}% lower train loss</b> and <b>${pct(te[2], te[1])}% lower held-out loss</b> than <span class="e">e-means</span> at the same ${r.T} passes, and ${pct(tr[2], tr[0])}% / ${pct(te[2], te[0])}% lower than Lloyd after ${r.iters} iterations.${reachTxt}`;
+  const sts = [$("stL"), $("stE"), $("stH")]; const nk = r.n * r.K; for (let m = 0; m < 3; m++) sts[m].innerHTML = `train <b>${tr[m].toPrecision(4)}</b> · held-out <b>${te[m].toPrecision(4)}</b><br>${(r.ops[m] / nk).toFixed(2)} passes of n·k · ${(r.cpu[m] / 1000).toFixed(1)} s compute`;
+  $("train").textContent = "Train"; }
+$("train").addEventListener("click", startRun);
+window.addEventListener("resize", () => { if (run) { [$("cvL"), $("cvE"), $("cvH")].forEach(fitCanvas); fitCanvas($("cvC")); run.layer = pointsLayer(run.X, run.n, $("cvL").width, $("cvL").height, run.b, css("--muted")); drawAll(run); } });
+// initial frame: the data, before training
+(function initial() { const shape = $("shape").value, n = nFromSlider(+$("n").value), K = kFromSlider(+$("k").value), seed = +$("seed").value; const rows = GEN[shape](n, K, seed); const X = flatten(rows); const b = bounds(X, n);
+  [$("cvL"), $("cvE"), $("cvH")].forEach(fitCanvas); fitCanvas($("cvC")); const layer = pointsLayer(X, n, $("cvL").width, $("cvL").height, b, css("--muted")); for (const id of ["cvL", "cvE", "cvH"]) { const cv = $(id); cv.getContext("2d").drawImage(layer, 0, 0); }
+  drawChart($("cvC"), [], 25); })();
+
+  </script>
+</Base>

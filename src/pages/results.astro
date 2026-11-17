@@ -1,0 +1,109 @@
+---
+import Base from "../layouts/Base.astro";
+import R from "../data/results.json";
+const pct = (v: number, d = 2) => (v < 0 ? "−" : "+") + Math.abs(v).toFixed(d) + "%";
+const cls = (v: number) => (v < -0.1 ? "win" : v > 0.1 ? "loss" : "tie");
+const sig = (v: number, digits = 6) => (Math.abs(v) >= 1000 ? v.toFixed(0) : v.toPrecision(digits));
+const grid = R.grid.filter((g) => g.dataset !== "deep").sort((a, b) => a.name.localeCompare(b.name) || a.k - b.k);
+const deep = R.grid.find((g) => g.dataset === "deep");
+const order = ["Lloyd@25 (random init)", "k-means++ (50k sample) Lloyd@25", "k-means++ (full data) Lloyd@25", "Sculley mini-batch T5", "e-means T3", "e-means T5", "e-means T5 quality", "h-means T3", "h-means T5", "h-means T5 quality", "h-means v1 T5", "h-means v2 T5"];
+const m = (g: any, name: string) => g.methods[name];
+---
+<Base title="h-means results" description="All measurements: 15 configurations with error bars, the SIFT k sweep, held-out loss, wall-clock on GPU and CPU, Deep-10M, ablations, limitations." page="results">
+  <section class="hero" style="padding-bottom: 0">
+    <p class="eyebrow">Results</p>
+    <h1>Experimental results</h1>
+    <p class="lede">One machine (Apple M3 Ultra, PyTorch on the GPU through MPS and on 32 CPU cores), one exact evaluation for every method, five seeds for the mini-batch methods. "Best e-means" always means the better of e-means's two batch laws for that configuration. Loss is the exact train MSE on all training rows; held-out MSE is on 20,000 rows never seen in training.</p>
+  </section>
+
+  <h2 id="protocol">Protocol</h2>
+  <ul>
+    <li>Datasets: SIFT-128 (980k), GloVe-100 (1.16M, L2-normalised), NYTimes-256 (229k, L2-normalised), Fashion-MNIST-784 (40k), two synthetic Gaussian mixtures in 96 dimensions (balanced with 4,096 components; Zipf-imbalanced with 2,048), Deep-96 (10M). k from n/k ≈ 120 down to n/k ≈ 7; the e-means laws were fitted for n/k ≥ 8.</li>
+    <li>Baselines: Lloyd@25 from random rows (3 seeds); greedy k-means++ seeding (50k sample, 3 trials, and once on the full data) followed by Lloyd@25; Sculley's mini-batch k-means (B = 4,096, 5 passes); e-means at 3 and 5 passes with its default throughput law and at 5 passes with its quality law (5 seeds). Same backend, same random rows per seed, same evaluation for all.</li>
+    <li>h-means at 3 and 5 passes in total; its warm start costs about 0.1 pass and is counted.</li>
+    <li>Three fixed h-means recipes ran on the full grid (v1, v2, v3, see the <a href="/#trail">design exploration</a>). "h-means" below is the final rule, which sets the EMA fraction from the points per cluster (0.4 below 24, 0.8 below 64, 1.0 above), applied to the logged runs: the v3 rows where it gives 0.4, the v2 rows where it gives 0.8, and later runs with EMA fraction 1.0 where it gives 1.0. Every fixed-recipe row appears in the per-configuration details below.</li>
+  </ul>
+
+  <h2 id="grid">Main comparison at five passes</h2>
+  <div class="chart-wrap" id="grid-chart"><h3>h-means train loss relative to the best e-means, all configurations</h3><p class="sub">Negative is h-means better. Each point is one (dataset, k); bars are ± one seed standard deviation. Hover for seeds won.</p><div class="tip" id="grid-tip"></div></div>
+  <div class="tablewrap"><table>
+    <thead><tr><th>dataset</th><th class="num">k</th><th class="num">n / k</th><th class="num">h-means T5 vs best e-means T5</th><th class="num">vs default law</th><th class="num">h-means T3 vs best e-means T5</th><th class="num">held-out, vs best</th><th class="num">seeds won</th><th class="num">time e-means / h-means (s)</th></tr></thead>
+    <tbody>{grid.map((g) => { const h3 = m(g, "h-means T3"), be = m(g, g.best_emeans), e5 = m(g, "e-means T5"), h5 = m(g, "h-means T5"); return (
+      <tr><td>{g.name}</td><td class="num">{g.k.toLocaleString("en-US")}</td><td class="num">{g.nk.toFixed(0)}</td>
+        <td class="num"><span class={cls(g.vs_best)}>{pct(g.vs_best)}</span> ± {g.vs_best_std.toFixed(2)}</td>
+        <td class="num">{pct(g.vs_default)}</td>
+        <td class="num">{h3 ? pct(100 * (h3.mean / be.mean - 1)) : "–"}</td>
+        <td class="num"><span class={cls(g.test_vs_best)}>{pct(g.test_vs_best)}</span></td>
+        <td class="num">{g.seeds_won} / {g.seeds}</td><td class="num">{e5.time.toFixed(1)} / {h5.time.toFixed(1)}</td></tr>); })}</tbody>
+  </table></div>
+  <ul>
+    <li><b>The gain is a function of points per cluster:</b> 0.03 to 0.5% at n/k ≈ 60 to 80, 1 to 2.5% at 15 to 20, 4.5 to 7% at 7 to 9. h-means is below the best e-means on every configuration and every seed; the smallest margin is GloVe k = 16,384 (0.03%, within a seed standard deviation of a tie).</li>
+    <li><b>Fewer passes for the same loss:</b> at 15 points per cluster or fewer, h-means after three passes is already below e-means after five.</li>
+    <li><b>Smaller seed variance:</b> the seed standard deviation of h-means is typically 3 to 10 times smaller than that of e-means with its default law.</li>
+    <li><b>Held-out loss follows the train loss at about a fifth of the size</b> on the real datasets (lower on 11 of 15 configurations), and reverses on the balanced synthetic mixture at 15 points per cluster (+0.7%), where the exact passes fit the training rows of a perfectly separable problem. See the limitations below.</li>
+    <li><b>Baselines are consistent with the literature:</b> e-means at five passes beats Lloyd@25 by 0.7 to 3% except at NYTimes k = 32,768 (n/k = 7), where Lloyd is 1.4% better than e-means and h-means is 8.4% better than Lloyd. Sculley is 1.4 to 19% worse than e-means. k-means++ seeding plus Lloyd@25 is 0.5 to 1.3% worse than e-means at five passes and 50 to 100 times slower; seeding on the full SIFT data (419 s of seeding alone) is still 0.7% above e-means at five passes.</li>
+  </ul>
+
+  <h3>Per-configuration tables</h3>
+  {grid.map((g) => (
+    <details><summary>{g.name}, n = {g.n.toLocaleString("en-US")}, k = {g.k.toLocaleString("en-US")} (n/k = {g.nk.toFixed(0)})</summary>
+      <div class="tablewrap"><table>
+        <thead><tr><th>method</th><th class="num">seeds</th><th class="num">train MSE</th><th class="num">vs e-means T5</th><th class="num">held-out MSE</th><th class="num">passes</th><th class="num">time (s)</th></tr></thead>
+        <tbody>{order.filter((o) => g.methods[o]).map((o) => { const s = g.methods[o], e5 = m(g, "e-means T5"); return (
+          <tr><td>{o}</td><td class="num">{s.n}</td><td class="num">{sig(s.mean)} ± {sig(s.std, 2)}</td><td class="num">{pct(100 * (s.mean / e5.mean - 1))}</td><td class="num">{sig(s.test)}</td><td class="num">{s.passes.toFixed(2)}</td><td class="num">{s.time.toFixed(1)}</td></tr>); })}</tbody>
+      </table></div>
+    </details>))}
+
+  <h2 id="sweep">Dependence on k (SIFT-128)</h2>
+  <p>SIFT-128, n = 980,000, k from 2,048 to 262,144, three seeds, five passes.</p>
+  <div class="chart-wrap" id="sweep-chart"><h3>h-means train loss relative to the best e-means, SIFT-128, 5 passes</h3><p class="sub">Negative is h-means better. Bars show ± one seed standard deviation.</p><div class="tip" id="sweep-tip"></div></div>
+  <div class="tablewrap"><table>
+    <thead><tr><th class="num">k</th><th class="num">n / k</th><th class="num">e-means T5</th><th class="num">e-means T5 quality</th><th class="num">h-means T5</th><th class="num">h-means vs best</th><th class="num">time e-means / h-means (s)</th></tr></thead>
+    <tbody>{R.sweep.map((s) => (<tr><td class="num">{s.k.toLocaleString("en-US")}</td><td class="num">{s.nk.toFixed(0)}</td><td class="num">{s.emeans.mean.toFixed(0)} ± {s.emeans.std.toFixed(0)}</td><td class="num">{s.emeans_q.mean.toFixed(0)} ± {s.emeans_q.std.toFixed(0)}</td><td class="num">{s.hmeans.mean.toFixed(0)} ± {s.hmeans.std.toFixed(0)}</td><td class="num"><span class={cls(s.vs_best)}>{pct(s.vs_best)}</span></td><td class="num">{s.emeans.time.toFixed(1)} / {s.hmeans.time.toFixed(1)}</td></tr>))}</tbody>
+  </table></div>
+  <p>Above two hundred points per cluster h-means (EMA fraction 1.0 there) ties e-means with the quality law within ±0.03% and is 0.05 to 0.2% below its default law. From sixty points per cluster down the gap widens to 15% at four points per cluster, where Lloyd's algorithm is itself competitive with e-means. With a fixed 0.4 EMA fraction the large-k end was 0.25% worse than e-means and the small end 14.7% better; with a fixed 0.8 fraction, 0.07% worse and 7.4% better.</p>
+
+  <h2 id="curves">Held-out loss as a function of passes</h2>
+  <p>Seed 0, held-out MSE after every pass. Dashed: three-pass runs; dotted: e-means quality law. The last point of each curve is the final centroids after e-means's last-pass finalisation, which is why the e-means curves can tick up at the end.</p>
+  <div class="two">
+    {Object.keys(R.curves).map((name, i) => (<div class="chart-wrap" id={"curve-" + i}><h3>{name}</h3><div class="tip" id={"curve-tip-" + i}></div></div>))}
+  </div>
+
+  <h2 id="deep">Deep-96 at 10M rows</h2>
+  {deep ? (<div>
+    <p>Deep-96, 9.97M training rows, k = 65,536 (152 points per cluster), two seeds. This is the regime of IVF training the e-means authors target: h-means is 0.2% below e-means in 10% less time (EMA fraction 1.0; the fixed 0.4 split was a tie).</p>
+    <div class="tablewrap"><table><thead><tr><th>method</th><th class="num">seeds</th><th class="num">train MSE</th><th class="num">vs e-means T5</th><th class="num">held-out MSE</th><th class="num">passes</th><th class="num">time (s)</th></tr></thead>
+      <tbody>{order.filter((o) => deep.methods[o]).map((o) => { const s = deep.methods[o], e5 = m(deep, "e-means T5"); return (<tr><td>{o}</td><td class="num">{s.n}</td><td class="num">{s.mean.toPrecision(6)}</td><td class="num">{pct(100 * (s.mean / e5.mean - 1))}</td><td class="num">{s.test.toPrecision(6)}</td><td class="num">{s.passes.toFixed(2)}</td><td class="num">{s.time.toFixed(0)}</td></tr>); })}</tbody></table></div>
+  </div>) : (<p class="muted">The Deep-10M runs of the final recipe are in progress; the v2-recipe runs gave h-means −0.23% train MSE vs e-means at five passes in 141 s against 151 s.</p>)}
+
+  <h2 id="cpu">CPU wall-clock time</h2>
+  <p>PyTorch CPU backend, 32 cores, three seeds. The official faiss implementation (<code>NumpyEmeans</code>) is included as a reference; its assignment runs through <code>faiss.knn</code>, which is about four times slower than a torch matmul on this machine, so compare the two torch rows.</p>
+  <div class="tablewrap"><table><thead><tr><th>dataset</th><th class="num">k</th><th>method</th><th class="num">train MSE</th><th class="num">time (s)</th><th class="num">passes</th></tr></thead>
+    <tbody>{R.cpu.map((c) => (<tr><td>{c.dataset}</td><td class="num">{c.k.toLocaleString("en-US")}</td><td>{c.method}</td><td class="num">{sig(c.mean)}</td><td class="num">{c.time.toFixed(1)}</td><td class="num">{c.passes.toFixed(2)}</td></tr>))}</tbody></table></div>
+
+  <h2 id="ablation">Ablations</h2>
+  <p>Five passes, five seeds, each component switched off in turn, relative to the recipe with the fixed 0.4 EMA fraction (the final rule's choice at 15 and 18 points per cluster; at 60 and 122 the rule picks 0.8 and 1.0, which appear as rows). Sorted by train MSE.</p>
+  <div class="two">{Object.entries(R.ablation).map(([name, rows]) => (<div><h3>{name}</h3><div class="tablewrap"><table><thead><tr><th>variant</th><th class="num">train MSE</th><th class="num">vs full</th><th class="num">time (s)</th></tr></thead>
+    <tbody>{rows.map((r) => (<tr><td>{r.variant}</td><td class="num">{sig(r.mean)}</td><td class="num"><span class={cls(-r.vs_full)}>{pct(r.vs_full)}</span></td><td class="num">{r.time.toFixed(1)}</td></tr>))}</tbody></table></div></div>))}</div>
+  <p>Every component except the loss-proportional donors matters somewhere. The Hartigan rule in the tail is the largest single lever at small n/k; a Lloyd-rule tail with identical bookkeeping gains nothing. The warm start is worth 0.3 to 2.3% and its loss-proportional allocation is what makes it survive imbalance (uniform children: +9% on the Zipf mixture). "e-means (all off)" is the faithful reimplementation.</p>
+
+  <h2 id="limits">Limitations</h2>
+  <ul>
+    <li><b>Regime.</b> Above about two hundred points per cluster h-means ties e-means's quality law on SIFT (±0.03%); its clear wins are a small-cluster effect. In the IVF-training regime the e-means authors target (hundreds of points per cluster) it is a tie to a small win (Deep-10M: 0.2%).</li>
+    <li><b>Held-out.</b> Train gains carry to held-out loss at about a fifth of their size on real data and can reverse on separable synthetic data at 15 points per cluster.</li>
+    <li><b>The pass split is a heuristic in n/k only.</b> Its thresholds (24 and 64 points per cluster) were set from the grid, the SIFT sweep and one synthetic check; the ablation shows the 0.4 and 0.8 splits within 0.1% of each other at 15 points per cluster and 0.6% apart at 18, so the lower threshold is soft. Separability and imbalance are not used.</li>
+    <li><b>Selection on the reported grid.</b> The final recipe was chosen after seeing all three recipes on the full grid. The k sweep, Deep-10M, CPU and ablation runs were made afterwards; the main grid should be read as "best of three recipes", all three of which beat e-means at small n/k.</li>
+    <li><b>Hyperparameters.</b> For the user h-means has the same two inputs as e-means, k and the pass budget; batch and step sizes follow the e-means laws, and the coarse level (k/16), the two local Lloyd iterations and the EMA constants are fixed. The one method constant e-means does not have, the pass split as a function of n/k, was set on the grid evaluated here, whereas the e-means laws were fitted on a dedicated sweep and evaluated elsewhere. Deep-10M and the ends of the SIFT sweep, run after the rule was fixed, are its only out-of-sample checks.</li>
+    <li><b>Wall-clock at small scale.</b> On problems that take e-means under five seconds on the accelerator, h-means is two to five times slower at equal passes: the warm start and the per-batch Hartigan bookkeeping are fixed costs. On the large problems it is 10 to 15% faster at equal passes, and h-means at three passes gives a lower loss than e-means at five in 60% of the time. Distance computations are the hardware-independent comparison.</li>
+    <li><b>One machine, one backend.</b> Everything ran on one Apple M3 Ultra through PyTorch. The official faiss implementation was used only as a correctness cross-check on CPU.</li>
+    <li><b>Memory.</b> The exact passes keep one int64 label per point and the exact per-cluster sums; e-means keeps only the centroids.</li>
+    <li><b>Low-d playground.</b> The 2-D demos show 35 to 48% lower loss, in the regime the e-means authors flag as outside their laws. It is a demonstration, not part of the claim.</li>
+  </ul>
+
+  <script is:inline src="/assets/charts.js"></script>
+  <script is:inline define:vars={{ R }}>
+    gridChart(document.getElementById("grid-chart"), R.grid.filter((g) => g.dataset !== "deep"), document.getElementById("grid-tip"), "vs_best");
+    sweepChart(document.getElementById("sweep-chart"), R.sweep, document.getElementById("sweep-tip"));
+    Object.keys(R.curves).forEach((name, i) => curveChart(document.getElementById("curve-" + i), R.curves[name], document.getElementById("curve-tip-" + i), name));
+  </script>
+</Base>

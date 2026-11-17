@@ -1,0 +1,196 @@
+---
+import Base from "../layouts/Base.astro";
+import Eq from "../components/Eq.astro";
+import R from "../data/results.json";
+const small = R.grid.filter((g) => g.nk <= 20 && g.dataset !== "deep");
+const lo = Math.min(...small.map((g) => g.vs_best)), hi = Math.max(...small.map((g) => g.vs_best));
+const won = R.grid.filter((g) => g.vs_best < 0).length;
+const sw = R.sweep[R.sweep.length - 1];
+const deep = R.grid.find((g) => g.dataset === "deep");
+const f1 = (x: number) => (x < 0 ? "−" : "+") + Math.abs(x).toFixed(1) + "%";
+const f2 = (x: number) => (x < 0 ? "−" : "+") + Math.abs(x).toFixed(2) + "%";
+const bibtex = `@techreport{monteiro2026hmeans,
+  title  = {h-means: mini-batch k-means with a hierarchical warm start and Hartigan assignment},
+  author = {Monteiro, H\\'elder},
+  year   = {2026},
+  note   = {Technical note. Code, logs and playground: https://github.com/heldernoid/hmeans}
+}`;
+---
+<Base title="h-means" description="h-means: e-means with a hierarchical warm start and Hartigan's correction. Lower k-means loss at the same number of distance computations when clusters are small." page="index">
+  <section class="hero">
+    <p class="eyebrow">Technical note, November 2026</p>
+    <h1><span class="nb">h-means</span>: mini-batch <span class="nb">k-means</span> with a hierarchical warm start and Hartigan assignment</h1>
+    <p class="claim">At equal distance computations, <span class="nb">h-means</span> reaches {Math.abs(hi).toFixed(1)}% to {Math.abs(lo).toFixed(1)}% lower <span class="nb">k-means</span> loss than <span class="nb">e-means</span> for 20 or fewer points per cluster, and matches or slightly improves on it for larger clusters.</p>
+    <p class="byline">Hélder Monteiro &nbsp;·&nbsp; <a href="/assets/hmeans.pdf">PDF</a> &nbsp;·&nbsp; <a href="https://github.com/heldernoid/hmeans">Code</a> &nbsp;·&nbsp; <a href="#cite">Cite</a></p>
+    <p class="lede">e-means (Bessa et al., Meta FAIR, 2026) trains k-means on mini-batches with an exponential moving average of cluster statistics and reaches a lower loss than Lloyd's algorithm in a tenth of the passes. h-means keeps the e-means update, laws and schedule, and changes the initialisation and the assignment rule: a hierarchical warm start with loss-proportional allocation of centroids, and Hartigan's exact move rule in place of nearest-centroid assignment. This page is the full account; every number on it comes from the logged runs of one repository.</p>
+    <div class="cta"><a class="btn" href="/playground">Open the playground</a><a class="btn ghost" href="/results">All results</a><a class="btn ghost" href="/assets/hmeans.pdf">Paper (PDF)</a><a class="btn ghost" href="https://github.com/heldernoid/hmeans">GitHub</a></div>
+  </section>
+
+  <section>
+    <p>Three Gaussians plus uniform noise, the first distribution of the e-means playground. The three methods place the same number of centroids and spend the same number of distance computations per pass. Lloyd and e-means start from the same random rows; since 70% of the points lie in the largest Gaussian, 70% of their centroids start inside it and stay there, drawn on top of each other. h-means allocates centroids in proportion to the loss, so the sparse noise region, where every point is far from its centroid, receives many more of them. The simulation runs in this tab.</p>
+    <div id="sim-hero"></div>
+    <p class="small muted">Two dimensions exaggerate the gap (the e-means laws were not fitted there, and faiss switches dead-cluster revival off at d ≤ 2); the measurements below on 96- to 784-dimensional data are the fair comparison.</p>
+  </section>
+
+
+  <h2 id="gain">The gain, as a function of points per cluster</h2>
+  <div class="tiles">
+    <div class="tile"><div class="num">{f1(lo)}</div><div class="lab">train loss vs the best e-means at 5 passes, NYTimes k = 32,768 (7 points per cluster), 5 seeds</div></div>
+    <div class="tile"><div class="num">{won} / {R.grid.length}</div><div class="lab">configurations (six datasets, Deep-10M included) where h-means is below the better of e-means's two batch laws at equal passes; every seed on each</div></div>
+    <div class="tile"><div class="num">3 of 5</div><div class="lab">passes: at 15 points per cluster or fewer, h-means after 3 passes is already below e-means after 5</div></div>
+    <div class="tile"><div class="num e">±0.03%</div><div class="lab">train loss vs e-means (quality law) at 240 to 480 points per cluster on SIFT: a tie, the regime where h-means has nothing to add</div></div>
+  </div>
+  <p>SIFT-128, 980,000 vectors, k from 2,048 to 262,144, three seeds, five passes each. The gain is a function of n/k: a tie above about two hundred points per cluster, increasing below sixty.</p>
+  <div class="chart-wrap" id="sweep-chart"><h3>h-means train loss relative to the best e-means, SIFT-128, 5 passes</h3><p class="sub">Negative is h-means better. Bars show ± one seed standard deviation. Hover for the numbers.</p><div class="tip" id="sweep-tip"></div></div>
+  <p>At k = 262,144 (four points per cluster) the difference is {f1(sw.vs_best)}. At that scale Lloyd's algorithm is itself competitive with e-means. The summary is that h-means is a better optimiser of the k-means objective when clusters are small, and equivalent to e-means when they are not. Both changes address the same weakness: with few points per cluster, the mini-batch estimate of a cluster's size and position is noisy, and nearest-centroid assignment makes moves that increase the objective.</p>
+
+  <div class="cards">
+    <div class="card"><svg viewBox="0 0 120 64" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="4,44 16,30 28,40 40,22 52,34 64,18 76,28 88,14 100,22 112,10" opacity="0.5"/><path class="ink" d="M4 46 C 40 40, 70 24, 112 14" stroke="currentColor" stroke-width="2.5"/></svg><h3>EMA statistics (e-means)</h3><p>Mass and centroid of every cluster are exponential moving averages over mini-batches. Kept unchanged.</p></div>
+    <div class="card"><svg viewBox="0 0 120 64" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="8" y1="56" x2="8" y2="6"/><line x1="8" y1="56" x2="114" y2="56"/><path class="ink" d="M14 50 L 108 16" stroke="currentColor" stroke-width="2.5"/><circle cx="30" cy="44" r="2.5" fill="currentColor"/><circle cx="56" cy="35" r="2.5" fill="currentColor"/><circle cx="84" cy="25" r="2.5" fill="currentColor"/></svg><h3>No tuning (e-means)</h3><p>Batch size and step size follow fitted laws of n, k and the pass budget. The user sets k and the budget.</p></div>
+    <div class="card"><svg viewBox="0 0 120 64" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="34" cy="32" r="24" opacity="0.5"/><circle cx="88" cy="20" r="12" opacity="0.5"/><circle cx="90" cy="48" r="9" opacity="0.5"/><g class="ink" fill="currentColor" stroke="none"><circle cx="22" cy="24" r="2.5"/><circle cx="40" cy="20" r="2.5"/><circle cx="26" cy="42" r="2.5"/><circle cx="44" cy="38" r="2.5"/><circle cx="34" cy="31" r="2.5"/><circle cx="88" cy="20" r="2.5"/><circle cx="90" cy="48" r="2.5"/></g></svg><h3>Hierarchical warm start (h-means)</h3><p>k/16 coarse centroids first; each coarse cluster then receives children in proportion to its share of the loss.</p></div>
+    <div class="card"><svg viewBox="0 0 120 64" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="30" cy="34" r="22" opacity="0.5"/><circle cx="94" cy="34" r="9" opacity="0.5"/><circle cx="60" cy="34" r="3" fill="currentColor" class="ink" stroke="none"/><path class="ink" d="M64 34 L 82 34" stroke="currentColor" stroke-width="2"/><path class="ink" d="M78 30 L 83 34 L 78 38" stroke="currentColor" stroke-width="2"/></svg><h3>Hartigan's move rule (h-means)</h3><p>A point moves only if the exact change of the objective, with the N/(N±1) size factors, is negative.</p></div>
+    <div class="card"><svg viewBox="0 0 120 64" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="8" y="12" width="40" height="40" opacity="0.5"/><line x1="8" y1="22" x2="48" y2="22" opacity="0.5"/><line x1="8" y1="32" x2="48" y2="32" opacity="0.5"/><line x1="8" y1="42" x2="48" y2="42" opacity="0.5"/><line x1="18" y1="12" x2="18" y2="52" opacity="0.5"/><line x1="28" y1="12" x2="28" y2="52" opacity="0.5"/><line x1="38" y1="12" x2="38" y2="52" opacity="0.5"/><text x="56" y="38" font-size="16" fill="currentColor" stroke="none">×</text><rect class="ink" x="72" y="12" width="12" height="40" stroke="currentColor" stroke-width="2"/><text x="92" y="38" font-size="16" fill="currentColor" stroke="none">=</text><rect x="104" y="12" width="10" height="40" opacity="0.5"/></svg><h3>One matrix product (h-means)</h3><p>The rule for all k centroids is a dot product in d + 2 dimensions, so it costs the same as nearest-centroid search.</p></div>
+    <div class="card"><svg viewBox="0 0 120 64" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="8" y="22" width="104" height="20" opacity="0.5"/><rect class="ink" x="8" y="22" width="42" height="20" fill="currentColor" opacity="0.9" stroke="none"/><text x="18" y="56" font-size="9" fill="currentColor" stroke="none">EMA</text><text x="66" y="56" font-size="9" fill="currentColor" stroke="none">exact Hartigan</text></svg><h3>Pass schedule (h-means)</h3><p>The budget is split between EMA passes and exact passes by a rule on n/k; above 64 points per cluster there are no exact passes.</p></div>
+  </div>
+
+  <h2 id="kmeans">The k-means problem</h2>
+  <p>k-means looks for k centroids that minimise the mean squared distance from every point to its nearest centroid:</p>
+  <Eq display tex={String.raw`\mathcal{L}(c_1,\dots,c_k) \;=\; \frac{1}{n}\sum_{i=1}^{n}\;\min_{j}\,\lVert x_i - c_j\rVert^2`} />
+  <p>Every method on this site maintains a sum <Eq tex="S_j" /> and a count <Eq tex="N_j" /> per cluster and takes <Eq tex="c_j = S_j / N_j" />. Lloyd's algorithm recomputes both from the full data at every iteration. Each iteration costs n·k distance computations, one "pass", and 25 iterations are a common budget. All comparisons here are at equal passes, which makes them independent of hardware.</p>
+
+  <h2 id="emeans">The e-means algorithm</h2>
+  <p>e-means (Bessa, Jégou, Touvron and others, Meta FAIR, 2026) processes mini-batches of B points. With <Eq tex="n_j" /> the number of batch points assigned to cluster j and <Eq tex="m_j" /> their mean, the update is an exponential moving average of the mass and a mass-weighted pull of the centroid:</p>
+  <Eq display tex={String.raw`N_j \leftarrow (1-\alpha)\,N_j + \alpha\, n_j, \qquad c_j \leftarrow c_j + \frac{\alpha\, n_j}{N_j}\,(m_j - c_j)`} />
+  <p>The step follows a cosine schedule from a peak <Eq tex={String.raw`\alpha_0`} /> down to a tenth of it. Batch size and peak step are not tuned by hand but set by two fitted laws of k, n and the number of passes T:</p>
+  <Eq display tex={String.raw`B \;=\; C_B\, k^{0.135}\, n^{0.876}\, T^{0.813}, \qquad \alpha_0 \;=\; 0.824\, k^{-0.462}\, B^{0.900}\, n^{-0.450}\, T^{-0.106}`} />
+  <p>with <Eq tex="C_B = 0.0351" /> for the throughput setting and eight times smaller for the quality setting. After the last pass the centroids are replaced by the exact means of the points seen during that pass.</p>
+  <h3>Dead-cluster revival</h3>
+  <p>Every five updates, clusters whose mass has fallen below a tenth of the mean are revived by splitting a donor sampled in proportion to mass. h-means inherits this unchanged; the e-means paper's ablation shows its value on DEEP and SIFT. In two dimensions dead clusters are rare, which is why faiss switches revival off at d ≤ 2, and a 2-D simulation of it shows nothing, so none is given here.</p>
+
+  <h2 id="repro">What reproducing e-means showed</h2>
+  <ul>
+    <li><b>The published claims are reproduced.</b> Our PyTorch reimplementation matches the official faiss <code>NumpyEmeans</code> within seed noise, and e-means at three passes beats Lloyd at 25 iterations on every dataset we tried (SIFT, GloVe, NYTimes, Fashion-MNIST, Deep-10M).</li>
+    <li><b>e-means is not converged at 5 passes.</b> The loss keeps decreasing up to 25 passes; the pass budget determines the final quality.</li>
+    <li><b>The throughput batch law is suboptimal on this hardware.</b> The quality law (eight times smaller batches) is 0.2 to 1.5% better at equal passes and still far faster than Lloyd. We report both laws throughout and compare against the better one.</li>
+    <li><b>e-means weakens at small n/k.</b> The laws were fitted for n/k ≥ 8. At seven points per cluster (NYTimes, k = 32,768) Lloyd at 25 iterations beats e-means at five passes by 1.4%. Small clusters are also where the EMA mass is a poor estimate of the true cluster size.</li>
+    <li><b>Exact Lloyd passes after e-means recover little.</b> Finishing e-means with exact Lloyd passes improves the loss by about 0.1%.</li>
+  </ul>
+
+  <h2 id="warm">Hierarchical warm start with loss-proportional allocation</h2>
+  <p>Run e-means for half a pass with <Eq tex="k_c = k/16" /> coarse centroids. Assign every point to its coarse centroid (one pass of <Eq tex={String.raw`n \cdot k_c`} />, a sixteenth of a full pass) and accumulate each coarse cluster's count <Eq tex="|C_j|" /> and sum of squared errors <Eq tex={String.raw`\mathrm{SSE}_j`} />. Apportion the k fine centroids to the coarse clusters by largest remainder:</p>
+  <Eq display tex={String.raw`k_j \;=\; \operatorname{apportion}\!\Big(k \cdot \frac{\mathrm{SSE}_j}{\sum_i \mathrm{SSE}_i}\Big), \qquad 1 \le k_j \le |C_j|`} />
+  <p>Children start at random members of their coarse cluster and take two Lloyd iterations in which a point only sees the <Eq tex="k_j" /> children of its own coarse cluster (cost <Eq tex={String.raw`2\,n\,k/k_c`} />, an eighth of a pass). The EMA mass of each child is initialised to its count scaled to one batch, <Eq tex={String.raw`N_j = |C_j^{\text{child}}| \cdot B / n`} />, so the first EMA updates neither ignore nor over-trust the warm start. The whole warm start costs about a tenth of a pass.</p>
+  <p>The simulation isolates the initialisation: all three panels run plain e-means passes with nearest-centroid assignment, from random rows, from a warm start that gives every coarse cluster the same number of children, and from the loss-proportional warm start. The mixture has Zipf-distributed component sizes, where uniform allocation starves the large components. On the 96-dimensional Zipf mixture of the benchmark, uniform allocation is 9% worse.</p>
+  <div id="sim-warm"></div>
+
+  <h2 id="hartigan">Hartigan's move rule</h2>
+  <p>Moving one point x from cluster a (size <Eq tex="N_a" />) to cluster b (size <Eq tex="N_b" />) changes the k-means objective by exactly</p>
+  <Eq display tex={String.raw`\Delta_{a\to b}(x) \;=\; \frac{N_b}{N_b+1}\,\lVert x - c_b\rVert^2 \;-\; \frac{N_a}{N_a-1}\,\lVert x - c_a\rVert^2`} />
+  <p>so the point moves to the b that minimises <Eq tex={String.raw`\tfrac{N_b}{N_b+1}\lVert x-c_b\rVert^2`} /> if that is below its stay cost <Eq tex={String.raw`\tfrac{N_a}{N_a-1}\lVert x-c_a\rVert^2`} />. Lloyd's rule is the limit of both factors going to one. With ten points per cluster the factors are 0.91 and 1.11: a twenty percent asymmetry that nearest-centroid assignment ignores.</p>
+  <h3>Matrix formulation</h3>
+  <p>With <Eq tex="g_j = N_j/(N_j+1)" />, the join cost of every centroid is a dot product of augmented vectors:</p>
+  <Eq display tex={String.raw`g_j\,\lVert x - c_j\rVert^2 \;=\; \big[\,\lVert x\rVert^2,\; x,\; 1\,\big]\cdot\big[\,g_j,\; -2\,g_j\,c_j,\; g_j\lVert c_j\rVert^2\,\big]`} />
+  <p>A batch of points against all k centroids is therefore one matmul in d + 2 dimensions instead of d, followed by scattering the stay cost into each point's current column and an argmin. A Hartigan pass costs the same as an exact Lloyd pass. Empty clusters cannot be joined through the rule (their join cost is set to infinity; a first version without this guard collapsed); they are re-seeded at the farthest point of a mass-sampled donor every five updates. Inside the EMA passes the rule uses the scaled EMA mass <Eq tex={String.raw`\hat N_j = N_j \cdot n / B`} /> as the size estimate.</p>
+  <p>The simulation runs at ten points per cluster, the regime where the factors matter. The first and third panels share the warm start and the passes and differ only in the rule: the first keeps nearest-centroid assignment (Lloyd's rule) throughout and finishes with exact passes that move points by that rule with the same incremental bookkeeping; the third uses Hartigan's rule in the EMA passes and in the exact passes, which is h-means. The middle panel is e-means. In the benchmark ablation the Lloyd-rule tail gains nothing over no tail, so it is the N/(N±1) factors and not the exact bookkeeping that carry the gain.</p>
+  <div id="sim-rule"></div>
+
+  <h2 id="schedule">Pass schedule</h2>
+  <p>With T total passes, the first <Eq tex={String.raw`\max(1, \operatorname{round}(f\,T))`} /> are e-means EMA passes with the Hartigan-corrected assignment. The remaining passes are exact: the per-cluster sums and counts of all points, available for free from the last EMA pass, are updated incrementally as points move. The EMA fraction f depends on the points per cluster: 0.4 below 24, 0.8 below 64, 1.0 above. Exact passes only make local moves, which is what small clusters need; with many points per cluster the warm start carries the gain and further EMA passes preserve it better than exact passes do (on a separable mixture at 234 points per cluster, EMA-only after the warm start scored 41.0 against 43.0 with exact passes and 50.9 for e-means). Everything else, laws, schedule, revival, finalisation, is e-means's. For the user the method has the same two inputs as e-means, k and the pass budget.</p>
+
+  <h2 id="minima">Escaping local minima</h2>
+  <p>The e-means site shows that mini-batch noise lets e-means escape the local minima of Lloyd's algorithm on well separated Gaussians of unequal size with more centroids than blobs: Lloyd crowds centroids on a small blob and leaves a large one short, e-means starts in the same trap and leaves it. h-means keeps this behaviour, since its EMA passes are e-means passes. The toys below follow the e-means site (same data for every start, 20 passes, Lloyd 25 iterations). With 5 to 10 clusters the hierarchy of the warm start is degenerate (one coarse centroid) and its local Lloyd iterations would cost two full passes, so h-means runs here without it: random rows, then Hartigan-corrected EMA passes. Press "Run 100 random starts" to count how often each method ends more than 1% above the best loss reached. Measured with this code (starts 1000 to 1099): on the two-blob toy Lloyd is stuck on 55 of 100 starts and e-means and h-means on 12; on the grid and the square the port shows only a small difference (90 against 86 and 65 against 58), less than the e-means site reports for its fixed batches of 256, so the escape depends on the batch and step sizes the laws choose for n = 2,000.</p>
+  <div id="sim-minima"></div>
+
+  <h2 id="trail">Design exploration</h2>
+  <p>The ideas tried, in chronological order, with their measured outcome. "Negative" means the idea did not improve on exact assignment at equal wall-clock time or equal distance computations on this hardware.</p>
+  <ol class="trail">
+    <li><span class="tag dead">negative</span><p><b>Approximate assignment with a cached candidate list</b> (each point only re-scored against its last few nearest centroids, refreshed periodically). Near-ties on real embeddings are missed and the loss stalls above exact assignment.</p></li>
+    <li><span class="tag dead">negative</span><p><b>Graph-based assignment</b> (centroid k-NN graph, local search from the previous label). Same failure mode, more bookkeeping.</p></li>
+    <li><span class="tag dead">negative</span><p><b>Bounded exact assignment</b> (triangle-inequality bounds to skip centroids). Certifies 0.1% of the distance computations on 128-d embeddings; the bounds are too loose in high dimension.</p></li>
+    <li><span class="tag dead">negative</span><p><b>PCA filter-and-refine</b> (score in 32 dimensions, refine the top candidates exactly). Twice the multiply-adds at best and slower than one dense matmul on an accelerator.</p></li>
+    <li><span class="tag dead">negative</span><p><b>Inverted-file first pass, growing batches, Lloyd-rule incremental tail.</b> None moved the loss at equal passes.</p></li>
+    <li><span class="tag kept">kept</span><p><b>Hierarchical warm start with loss-proportional allocation.</b> A coarse e-means run with k/16 centroids, children apportioned by SSE, two local Lloyd iterations. About 0.1 pass of cost, worth 0.3% at n/k = 60 and more below. A uniform split instead of loss-proportional is 9% worse on a Zipf mixture.</p></li>
+    <li><span class="tag found">result</span><p><b>The Hartigan correction is the main source of the gain at small n/k.</b> Replacing the Lloyd rule with Hartigan's exact move rule in the final passes: 2.1% better at k = 65,536 and 5.4% at k = 131,072 on SIFT at equal passes. A Lloyd-rule tail with the same exact bookkeeping gains nothing, so it is the N/(N±1) factors, not the exact means, that matter.</p></li>
+    <li><span class="tag kept">kept</span><p><b>Hartigan's rule inside the EMA passes too</b>, with the EMA mass scaled by n/B as the cluster size estimate. The only change that also helps at n/k ≈ 60 (0.25% on SIFT k = 16,384).</p></li>
+    <li><span class="tag dead">negative</span><p><b>Loss-proportional revival donors.</b> Sampling the split donor by SSE instead of mass: free, but within noise everywhere. Kept as an option, not part of the claim.</p></li>
+    <li><span class="tag found">result</span><p><b>Split of the pass budget.</b> Three fixed recipes ran on the full grid: v1 (no Hartigan in the EMA passes), v2 (80% EMA, 20% exact), v3 (40% EMA, 60% exact). v3 won below 20 points per cluster, v2 between 30 and 60, and both lost a quarter percent above 120. A synthetic check at 234 points per cluster showed the exact tail itself losing the warm start's gain. The final recipe sets the EMA fraction from n/k (0.4 below 24, 0.8 below 64, 1.0 above). The thresholds were chosen on the grid we report; see the limitations.</p></li>
+  </ol>
+
+  <h2 id="validation">Experimental validation</h2>
+  <p>Six datasets (SIFT-128, GloVe-100, NYTimes-256, Fashion-MNIST-784, two synthetic 96-dimensional Gaussian mixtures, Deep-96 at 10M rows), k from n/k ≈ 150 down to n/k ≈ 7, five seeds for the mini-batch methods, one machine (Apple M3 Ultra, PyTorch on the GPU). Loss is the exact train MSE on all training rows. "Best e-means" is the better of e-means's two batch laws for that configuration. The <a href="/results">results page</a> has every table with error bars, held-out loss, wall-clock time on GPU and CPU, the Deep-10M run and the ablations.</p>
+  <div class="chart-wrap" id="grid-chart"><h3>h-means train loss relative to the best e-means at 5 passes, every configuration</h3><p class="sub">Negative is h-means better. Bars show ± one standard deviation over seeds. Hover for the numbers.</p><div class="tip" id="grid-tip"></div></div>
+  <ul>
+    <li><b>Below 20 points per cluster</b> h-means is {f1(hi)} to {f1(lo)} below the best e-means, on every configuration and every seed, with 3 to 10 times smaller seed variance.</li>
+    <li><b>Between 30 and 80 points per cluster</b> the gain is 0.03 to 0.9%. <b>Deep-96 at 10M rows</b> (k = 65,536, 152 points per cluster): {f2(deep.vs_best)} in {deep.methods["h-means T5"].time.toFixed(0)} s against {deep.methods["e-means T5"].time.toFixed(0)} s.</li>
+    <li><b>Above 200 points per cluster</b> the two methods tie within ±0.03%.</li>
+    <li><b>Held-out loss</b> follows the train loss at about a fifth of the size on real data (lower on 11 of 15 configurations) and reverses on the balanced synthetic mixture at 15 points per cluster.</li>
+    <li><b>Wall-clock.</b> Faster than e-means on problems that take more than about 15 s; 2 to 5 times slower at equal passes on sub-5 s problems, where the Python loop dominates.</li>
+  </ul>
+
+  <h2 id="library">Library and code</h2>
+  <p>The repository ships a scikit-learn style estimator with a NumPy backend (the only dependency) and an optional PyTorch backend for CPU, Apple MPS and CUDA. <code>EMeans</code> is the faithful e-means with the same interface.</p>
+  <pre><code>{`pip install "git+https://github.com/heldernoid/hmeans.git"                      # NumPy backend
+pip install "hmeans[torch] @ git+https://github.com/heldernoid/hmeans.git"     # + PyTorch backend`}</code></pre>
+  <pre><code>{`import numpy as np
+from hmeans import HMeans, EMeans
+
+X = np.random.rand(200_000, 64).astype("float32")
+km = HMeans(n_clusters=4096, n_passes=5, random_state=0).fit(X)
+km.cluster_centers_, km.labels_, km.inertia_
+EMeans(n_clusters=4096, n_passes=5).fit(X)`}</code></pre>
+  <p>The <a href="/reproduce">reproduction page</a> lists the repository layout and the commands that regenerate every table and figure from the logged runs.</p>
+
+  <h2 id="limits">Limitations</h2>
+  <ul>
+    <li><b>Regime.</b> The clear wins are a small-cluster effect. In the inverted-file regime of hundreds of points per cluster h-means is a tie to a small win. Where it wins by 5 to 7%, Lloyd at 25 iterations is also competitive with e-means.</li>
+    <li><b>Held-out.</b> Training gains carry to held-out loss at about a fifth of their size and can reverse on separable synthetic data at 15 points per cluster.</li>
+    <li><b>Selection.</b> The rule for the pass split was chosen after seeing the grid; the main table is "best of three measured splits" per configuration rather than one pre-registered recipe. For the user the method has the same two inputs as e-means, k and the pass budget, but the one constant e-means does not have was set on the evaluated grid, whereas the e-means laws were fitted on a dedicated sweep and evaluated elsewhere. Deep-10M and the ends of the SIFT sweep, run after the rule was fixed, are its only out-of-sample checks.</li>
+    <li><b>One machine, no CUDA comparison</b> against the official implementation. <b>Memory:</b> the exact passes keep one label per point and the exact per-cluster sums; e-means keeps only the centroids.</li>
+  </ul>
+
+  <h2 id="cite">Citation</h2>
+  <div class="cite"><pre><code id="bib">{bibtex}</code></pre><button class="btn ghost" id="copybib" style="padding: 5px 10px; font-size: 13px">Copy</button></div>
+
+  <h2 id="refs">References</h2>
+  <ol>
+    <li>L. Bessa et al. e-means: outperforming k-means in one-tenth the epochs. arXiv:2611.09501, 2026. Code in faiss, <code>contrib/e_means</code>. Site: <a href="https://e-means.github.io">e-means.github.io</a>.</li>
+    <li>J. A. Hartigan and M. A. Wong. Algorithm AS 136: A k-means clustering algorithm. Applied Statistics 28(1), 1979.</li>
+    <li>S. P. Lloyd. Least squares quantization in PCM. IEEE Transactions on Information Theory, 1982.</li>
+    <li>J. MacQueen. Some methods for classification and analysis of multivariate observations. Berkeley Symposium, 1967.</li>
+    <li>D. Sculley. Web-scale k-means clustering. WWW 2010.</li>
+    <li>D. Arthur and S. Vassilvitskii. k-means++: the advantages of careful seeding. SODA 2007.</li>
+  </ol>
+
+  <script is:inline src="/assets/core.js"></script>
+  <script is:inline src="/assets/charts.js"></script>
+  <script is:inline src="/assets/sims.js"></script>
+  <script is:inline define:vars={{ sweep: R.sweep, grid: R.grid }}>
+    sweepChart(document.getElementById("sweep-chart"), sweep, document.getElementById("sweep-tip"));
+    gridChart(document.getElementById("grid-chart"), grid, document.getElementById("grid-tip"), "vs_best");
+  </script>
+  <script is:inline>
+    const L = { name: "Lloyd, 25 iterations", color: "--lloyd", lloyd: true, make: (X, n, K, T, s, iters) => new LloydTrainer(X, n, K, iters, s) };
+    const E = { name: "e-means", color: "--emeans", make: (X, n, K, T, s) => new EmeansTrainer(X, n, K, T, s, false) };
+    const H = { name: "h-means", color: "--hmeans", make: (X, n, K, T, s) => new HmeansTrainer(X, n, K, T, s) };
+    const vs = (a, b) => `<b>${pctBetter(a, b)}%</b>`;
+    raceSim({ root: "sim-hero", gen: "vo_toy", n: 40000, K: 800, T: 5, iters: 25, trainers: [L, Object.assign({}, E, { name: "e-means, 5 passes" }), Object.assign({}, H, { name: "h-means, 5 passes" })],
+      summary: (tr, te, r, v) => `h-means: ${vs(tr[2], tr[1])} lower train loss and ${vs(te[2], te[1])} lower held-out loss than <span class="e">e-means</span> at the same ${v.T} passes, ${pctBetter(tr[2], tr[0])}% lower than <span class="l">Lloyd</span> after ${v.iters} iterations.` });
+    raceSim({ root: "sim-warm", gen: "syn_gmm_zipf", n: 20000, K: 256, T: 5, trainers: [
+        { name: "random rows", color: "--emeans", make: (X, n, K, T, s) => new HmeansTrainer(X, n, K, T, s, { warmStart: false, hartiganEma: false, emaFrac: 1 }) },
+        { name: "warm start, uniform allocation", color: "--sculley", make: (X, n, K, T, s) => new HmeansTrainer(X, n, K, T, s, { allocation: "uniform", hartiganEma: false, emaFrac: 1 }) },
+        { name: "warm start, loss-proportional", color: "--hmeans", make: (X, n, K, T, s) => new HmeansTrainer(X, n, K, T, s, { hartiganEma: false, emaFrac: 1 }) }],
+      summary: (tr) => `Same e-means passes in all three panels. The loss-proportional warm start ends ${vs(tr[2], tr[0])} below random rows and ${vs(tr[2], tr[1])} below the uniform allocation.` });
+    raceSim({ root: "sim-rule", gen: "gaussian_blobs", n: 4000, K: 400, T: 5, trainers: [
+        { name: "Lloyd's rule (nearest centroid), exact tail", color: "--lloyd", make: (X, n, K, T, s) => new HmeansTrainer(X, n, K, T, s, { hartiganEma: false, tailRule: "lloyd", emaFrac: 0.4 }) },
+        E,
+        { name: "Hartigan's rule (h-means)", color: "--hmeans", make: (X, n, K, T, s) => new HmeansTrainer(X, n, K, T, s, { emaFrac: 0.4 }) }],
+      summary: (tr) => `Same warm start, same passes: Hartigan's rule ends ${vs(tr[2], tr[0])} below <span class="l">Lloyd's rule</span> and ${vs(tr[2], tr[1])} below <span class="e">e-means</span> at ten points per cluster.` });
+    raceSim({ root: "sim-minima", seeds: 100, fixedData: true, trainers: [L, Object.assign({}, E, { name: "e-means, 20 passes" }), { name: "h-means, 20 passes, no warm start", color: "--hmeans", make: (X, n, K, T, s) => new HmeansTrainer(X, n, K, T, s, { warmStart: false }) }],
+      variants: [
+        { id: "two", name: "Two blobs, 9:1 sizes, k = 8", gen: "two_blobs", n: 2000, K: 8, T: 20, iters: 25 },
+        { id: "grid", name: "3 x 3 grid, heavier corners, k = 10", gen: "blobs_grid", n: 2000, K: 10, T: 20, iters: 25 },
+        { id: "square", name: "Square around a heavier centre, k = 5", gen: "blobs_square", n: 2000, K: 5, T: 20, iters: 25 }],
+      summary: (tr, te, r, v, seed) => `Start ${seed}: train loss <span class="l">Lloyd</span> ${tr[0].toPrecision(4)}, <span class="e">e-means</span> ${tr[1].toPrecision(4)}, <b>h-means</b> ${tr[2].toPrecision(4)}; lower is better.` });
+    document.getElementById("copybib").addEventListener("click", async (e) => { try { await navigator.clipboard.writeText(document.getElementById("bib").textContent); e.target.textContent = "Copied"; } catch { e.target.textContent = "Select and copy"; } setTimeout(() => (e.target.textContent = "Copy"), 1500); });
+  </script>
+</Base>

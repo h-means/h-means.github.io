@@ -1,0 +1,66 @@
+---
+import Base from "../layouts/Base.astro";
+---
+<Base title="Reproduce h-means" description="The code layout, the environment, and the exact commands that regenerate every number on this site." page="reproduce">
+  <section class="hero" style="padding-bottom: 0">
+    <p class="eyebrow">Reproduce</p>
+    <h1>Reproduction</h1>
+    <p class="lede">The repository (<a href="https://github.com/heldernoid/hmeans">github.com/heldernoid/hmeans</a>) contains the implementation (scikit-learn interface), the baselines, the experiment plans, the logged results, and the scripts that generate the tables and figures of the report and of this site from those logs.</p>
+  </section>
+
+  <h2>Installation and usage</h2>
+  <pre><code>{`pip install "git+https://github.com/heldernoid/hmeans.git"                      # NumPy backend only (CPU)
+pip install "hmeans[torch] @ git+https://github.com/heldernoid/hmeans.git"     # + PyTorch backend: CPU, Apple MPS, CUDA
+pip install -e ".[torch,test]"       # from a checkout; ./setup.sh builds the full experiment environment`}</code></pre>
+  <pre><code>{`import numpy as np
+from hmeans import HMeans, EMeans
+
+X = np.random.rand(200_000, 64).astype("float32")            # numpy array or torch tensor
+km = HMeans(n_clusters=4096, n_passes=5, random_state=0).fit(X)
+km.cluster_centers_.shape, km.labels_.shape, km.inertia_       # (4096, 64), (200000,), float
+km.predict(X[:10]); km.transform(X[:10]); km.score(X)         # labels, distances, negative SSE
+HMeans(n_clusters=4096, backend="numpy").fit(X)                # force the NumPy backend
+HMeans(n_clusters=4096, backend="torch", device="cuda").fit(X)
+EMeans(n_clusters=4096, n_passes=5).fit(X)                     # e-means, same interface`}</code></pre>
+  <p><code>HMeans</code> follows the scikit-learn estimator API: <code>fit</code>, <code>predict</code>, <code>fit_predict</code>, <code>transform</code>, <code>score</code>, <code>get_params</code> and <code>set_params</code>, and it works inside a <code>Pipeline</code>; scikit-learn itself is optional. <code>n_passes</code> is the total number of passes over the data (3 is a fast setting, 5 the default). Two backends implement the same algorithm: <code>backend="numpy"</code> needs only NumPy and runs on the CPU through BLAS; <code>backend="torch"</code> runs on CPU, Apple MPS or CUDA; <code>"auto"</code> uses torch when it is installed. <code>ema_frac="auto"</code> selects the split between EMA passes and exact Hartigan passes from the points per cluster (0.4 below 24, 0.8 below 64, 1.0 above). The package version comes from git tags through setuptools-scm, so a tag <code>v0.2.0</code> installs as 0.2.0 and later commits as <code>0.2.1.devN+g&lt;hash&gt;</code>. <code>EMeans</code> is the faithful e-means reimplementation with the same interface. <code>pytest tests</code> runs the test suite; the torch tests skip when torch is absent.</p>
+
+  <h2>Repository layout</h2>
+  <div class="tablewrap"><table>
+    <tbody>
+      <tr><td><code>hmeans/backend.py</code></td><td>device-agnostic exact assignment (chunked matmul + argmin), distance-computation counting, greedy k-means++</td></tr>
+      <tr><td><code>hmeans/emeans_ref.py</code></td><td>e-means reimplementation: the constants, laws, schedule and revival of the shipped faiss recipe</td></tr>
+      <tr><td><code>hmeans/baselines.py</code></td><td>Lloyd (random or k-means++ init), Sculley mini-batch</td></tr>
+      <tr><td><code>hmeans/estimator.py</code></td><td><code>HMeans</code> and <code>EMeans</code>, the scikit-learn style estimators and backend selection</td></tr>
+      <tr><td><code>hmeans/core_numpy.py</code></td><td><code>HMeansNumpy</code>: the NumPy implementation of the final recipe</td></tr>
+      <tr><td><code>hmeans/laws.py</code></td><td>e-means constants, laws and schedule, the adaptive pass split (shared by both backends)</td></tr>
+      <tr><td><code>hmeans/hmeans.py</code></td><td><code>HMeansCore</code>: the torch implementation with every ablation switch</td></tr>
+      <tr><td><code>experiments/run.py</code></td><td>one configuration, one JSON line in <code>experiments/results/&lt;plan&gt;.jsonl</code> (commit, config, exact train and held-out MSE, time, operation counts, loss curve)</td></tr>
+      <tr><td><code>experiments/suite.py</code></td><td>the experiment plans; resumable, never overwrites</td></tr>
+      <tr><td><code>experiments/analyze.py</code></td><td>regenerates <code>experiments/tables/*.md</code> and <code>experiments/figures/*.png</code></td></tr>
+      <tr><td><code>experiments/export_site_data.py</code></td><td>writes <code>site/src/data/results.json</code>, the only data source of this site</td></tr>
+      <tr><td><code>site/</code></td><td>this site (Astro 5, static output); <code>public/assets/core.js</code> is the browser port of the three methods</td></tr>
+      <tr><td><code>paper/hmeans.pdf</code></td><td>the technical note (<a href="/assets/hmeans.pdf">download</a>; <code>tectonic hmeans.tex</code> rebuilds it)</td></tr>
+      <tr><td><code>REPORT.md</code>, <code>NOTES.md</code></td><td>the report, and the investigation log with every idea and measurement in order</td></tr>
+      <tr><td><code>LICENSE</code></td><td>MIT, with the third-party notice for the adapted e-means playground code</td></tr>
+    </tbody></table></div>
+
+  <h2>Regenerating the results</h2>
+  <p>About six hours on an M3 Ultra. Each plan appends to its own results file and skips runs it has already logged, so an interrupted plan resumes with the same command.</p>
+  <pre><code>{`for p in main v3 scaling scaling_v3 ablation_v3 kmeanspp deep deep_v3; do python experiments/suite.py $p mps; done
+python experiments/suite.py cpu cpu; python experiments/suite.py cpu_v3 cpu
+python experiments/analyze.py                 # tables and figures for REPORT.md
+python experiments/export_site_data.py        # results.json for this site`}</code></pre>
+  <p><code>main</code> holds the baselines and the v1 recipe, <code>v2</code> and <code>v3</code> the later recipes, <code>ablation_v3</code> the ablations of the final recipe, <code>scaling</code> the SIFT k sweep, <code>cpu</code> the CPU timings and the official faiss cross-check, <code>deep</code> the 10M-row run (3.6 GB download, optional).</p>
+
+  <h2>Building the site</h2>
+  <pre><code>{`cd site && npm install && npm run build && node scripts/relativize.mjs   # dist/ is a plain static site`}</code></pre>
+  <p>The build output has no absolute paths, so <code>dist/</code> serves from a GitHub Pages project site, a sub-folder or a local folder. Formulas are rendered at build time with KaTeX; the playground and the charts are plain scripts with no dependencies.</p>
+
+  <h2>Environment notes</h2>
+  <ul>
+    <li>Python 3.12, PyTorch, faiss-cpu, numpy, h5py. Datasets are the ANN-benchmarks HDF5 files; angular datasets are L2-normalised and deduplicated; 20,000 rows are held out per dataset.</li>
+    <li>faiss-cpu and torch each ship their own OpenMP runtime and abort the process when both load on macOS; <code>setup.sh</code> points faiss at torch's copy.</li>
+    <li>Apple MPS has no float64; the exact evaluation runs in float64 on the CPU.</li>
+    <li>Distance computations are counted in units of n·k ("passes") and in multiply-adds; wall-clock is device-synchronised <code>fit</code> time.</li>
+  </ul>
+</Base>

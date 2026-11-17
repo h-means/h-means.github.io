@@ -1,0 +1,20 @@
+{
+  "name": "h-means-site",
+  "type": "module",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build && node scripts/relativize.mjs",
+    "sync": "cp ../paper/hmeans.pdf public/assets/hmeans.pdf && (cd .. && .venv/bin/python experiments/export_site_data.py)",
+    "gif": "node scripts/demo-gif.mjs",
+    "preview": "astro preview"
+  },
+  "dependencies": {
+    "astro": "^5.0.0",
+    "katex": "^0.16.11"
+  },
+  "devDependencies": {
+    "puppeteer-core": "^24.43.1"
+  }
+}
