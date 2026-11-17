@@ -1,4 +1,5 @@
 ---
+import { asset } from "../lib/asset";
 import Base from "../layouts/Base.astro";
 import R from "../data/results.json";
 const pct = (v: number, d = 2) => (v < 0 ? "−" : "+") + Math.abs(v).toFixed(d) + "%";
@@ -100,7 +101,7 @@ const m = (g: any, name: string) => g.methods[name];
     <li><b>Low-d playground.</b> The 2-D demos show 35 to 48% lower loss, in the regime the e-means authors flag as outside their laws. It is a demonstration, not part of the claim.</li>
   </ul>
 
-  <script is:inline src="/assets/charts.js"></script>
+  <script is:inline src={asset("/assets/charts.js")}></script>
   <script is:inline define:vars={{ R }}>
     gridChart(document.getElementById("grid-chart"), R.grid.filter((g) => g.dataset !== "deep"), document.getElementById("grid-tip"), "vs_best");
     sweepChart(document.getElementById("sweep-chart"), R.sweep, document.getElementById("sweep-tip"));

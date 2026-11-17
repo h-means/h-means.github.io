@@ -1,4 +1,5 @@
 ---
+import { asset } from "../lib/asset";
 import Base from "../layouts/Base.astro";
 ---
 <Base title="h-means playground" description="Lloyd, e-means and h-means on the same 2-D points, compared at equal distance computations." page="playground">
@@ -55,7 +56,7 @@ import Base from "../layouts/Base.astro";
     <p>Two dimensions are the regime the e-means authors flag as outside their fitted laws (dead-cluster revival is switched off at d ≤ 2), which is why the gap here is far larger than on real embeddings. The <a href="/results">results page</a> has the numbers that matter: SIFT, GloVe, NYTimes, Fashion-MNIST, Deep-10M.</p>
   </div>
 
-  <script is:inline src="/assets/core.js"></script>
+  <script is:inline src={asset("/assets/core.js")}></script>
   <script is:inline>
 const $ = id => document.getElementById(id);
 const nFromSlider = v => Math.round(Math.pow(10, 4 + 1.7 * v / 100) / 1000) * 1000;   // 10k .. 500k, 60 -> 100k

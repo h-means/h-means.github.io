@@ -1,4 +1,5 @@
 ---
+import { asset } from "../lib/asset";
 import Base from "../layouts/Base.astro";
 import Eq from "../components/Eq.astro";
 import R from "../data/results.json";
@@ -161,9 +162,9 @@ EMeans(n_clusters=4096, n_passes=5).fit(X)`}</code></pre>
     <li>D. Arthur and S. Vassilvitskii. k-means++: the advantages of careful seeding. SODA 2007.</li>
   </ol>
 
-  <script is:inline src="/assets/core.js"></script>
-  <script is:inline src="/assets/charts.js"></script>
-  <script is:inline src="/assets/sims.js"></script>
+  <script is:inline src={asset("/assets/core.js")}></script>
+  <script is:inline src={asset("/assets/charts.js")}></script>
+  <script is:inline src={asset("/assets/sims.js")}></script>
   <script is:inline define:vars={{ sweep: R.sweep, grid: R.grid }}>
     sweepChart(document.getElementById("sweep-chart"), sweep, document.getElementById("sweep-tip"));
     gridChart(document.getElementById("grid-chart"), grid, document.getElementById("grid-tip"), "vs_best");
