@@ -45,6 +45,7 @@ await page.waitForFunction(() => window.__done >= 14, { timeout: 120000, polling
 const frames = await page.evaluate(() => window.__frames);
 frames.forEach((d, i) => writeFileSync(`${dir}f${String(i).padStart(3, "0")}.png`, Buffer.from(d.split(",")[1], "base64")));
 console.log(`${frames.length} frames`);
-execSync(`ffmpeg -y -loglevel error -framerate 7 -i ${dir}f%03d.png -vf "scale=960:-1:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=128[p];[s1][p]paletteuse=dither=bayer:bayer_scale=3" -loop 0 ${out}`);
+// every third frame, 880 px wide, 48 colours, no dither: keeps the GIF near 1.2 MB with the Voronoi cells on
+execSync(`ffmpeg -y -loglevel error -framerate 3 -i ${dir}f%03d.png -vf "select=not(mod(n\\,3)),scale=880:-1:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=48:stats_mode=diff[p];[s1][p]paletteuse=dither=none" -loop 0 ${out}`);
 console.log(`wrote ${out}`);
 process.exit(0);  // browser.close() can hang with this Chrome build; the process exit takes it down
