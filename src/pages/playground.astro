@@ -87,7 +87,7 @@ function evalAll(r, force) { const nk = r.n * r.K; for (let m = 0; m < 3; m++) {
     const train = meanLoss(r.X, r.sub, tr.C, r.K), test = meanLoss(r.Xt, r.nTest, tr.C, r.K); r.curves[m].push({ x: p, y: train, final: tr.done }); r.tcurves[m].push({ x: p, y: test }); r.nextEval[m] = Math.floor(p / r.evalEvery) * r.evalEvery + r.evalEvery; } }
 function drawAll(r) { const cvs = [$("cvL"), $("cvE"), $("cvH")], sts = [$("stL"), $("stE"), $("stH")]; const nk = r.n * r.K;
   for (let m = 0; m < 3; m++) { drawPanel(cvs[m], r.layer, r.trainers[m].C, r.K, r.b, r.colors[m]); const c = r.curves[m], t = r.tcurves[m]; const lab = m === 0 ? r.trainers[0].label : m === 1 ? `pass ${Math.min(r.T, Math.floor(r.trainers[1].progress) + (r.trainers[1].done ? 0 : 1))} / ${r.T}` : r.trainers[2].label;
-    sts[m].innerHTML = c.length ? `train <b>${c[c.length - 1].y.toPrecision(4)}</b> · held-out <b>${t[t.length - 1].y.toPrecision(4)}</b><br>${(r.ops[m] / nk).toFixed(2)} passes of n·k · ${lab} · ${(r.cpu[m] / 1000).toFixed(1)} s` : ""; }
+    sts[m].innerHTML = c.length ? `train <b>${c[c.length - 1].y.toPrecision(4)}</b> · held-out <b>${t[t.length - 1].y.toPrecision(4)}</b><br>k = ${fmtInt(r.K)} centroids · ${(r.ops[m] / nk).toFixed(2)} passes of n·k · ${lab} · ${(r.cpu[m] / 1000).toFixed(1)} s` : ""; }
   const xMax = Math.max(r.iters, r.T + 0.5); const series = [];
   for (let m = 0; m < 3; m++) { series.push({ pts: r.curves[m], color: r.colors[m], dashed: false }); series.push({ pts: r.tcurves[m], color: r.colors[m], dashed: true }); }
   drawChart($("cvC"), series, xMax);
@@ -111,7 +111,7 @@ function finish(r) { // final exact numbers on the full training set
   const target = r.curves[1][r.curves[1].length - 1].y; let reach = null; for (const p of r.curves[2]) if (p.y <= target) { reach = p.x; break; }
   const reachTxt = reach === null ? "" : ` h-means reached e-means's final loss after <b>${reach.toFixed(2)} passes</b> (e-means used ${r.T}).`;
   $("headline").innerHTML = `h-means: <b>${pct(tr[2], tr[1])}% lower train loss</b> and <b>${pct(te[2], te[1])}% lower held-out loss</b> than <span class="e">e-means</span> at the same ${r.T} passes, and ${pct(tr[2], tr[0])}% / ${pct(te[2], te[0])}% lower than Lloyd after ${r.iters} iterations.${reachTxt}`;
-  const sts = [$("stL"), $("stE"), $("stH")]; const nk = r.n * r.K; for (let m = 0; m < 3; m++) sts[m].innerHTML = `train <b>${tr[m].toPrecision(4)}</b> · held-out <b>${te[m].toPrecision(4)}</b><br>${(r.ops[m] / nk).toFixed(2)} passes of n·k · ${(r.cpu[m] / 1000).toFixed(1)} s compute`;
+  const sts = [$("stL"), $("stE"), $("stH")]; const nk = r.n * r.K; for (let m = 0; m < 3; m++) sts[m].innerHTML = `train <b>${tr[m].toPrecision(4)}</b> · held-out <b>${te[m].toPrecision(4)}</b><br>k = ${fmtInt(r.K)} centroids · ${(r.ops[m] / nk).toFixed(2)} passes of n·k · ${(r.cpu[m] / 1000).toFixed(1)} s compute`;
   $("train").textContent = "Train"; }
 $("train").addEventListener("click", startRun);
 window.addEventListener("resize", () => { if (run) { [$("cvL"), $("cvE"), $("cvH")].forEach(fitCanvas); fitCanvas($("cvC")); run.layer = pointsLayer(run.X, run.n, $("cvL").width, $("cvL").height, run.b, css("--muted")); drawAll(run); } });
