@@ -149,6 +149,8 @@ figcaption { color: var(--muted); font-size: 13.5px; margin-top: 6px; max-width:
 .sim { margin: 16px 0 8px; }
 .simctl { display: flex; align-items: center; gap: 12px 16px; flex-wrap: wrap; margin-top: 10px; }
 .simctl .btn { padding: 6px 12px; font-size: 13.5px; }
+.chk { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 13.5px; white-space: nowrap; cursor: pointer; }
+.chk input { accent-color: var(--accent); margin: 0; }
 .simctl select { font: inherit; font-size: 14px; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; }
 .figrow { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px; align-items: start; }
 .figrow > * { min-width: 0; }

@@ -31,6 +31,8 @@ const bibtex = `@techreport{monteiro2026hmeans,
     <p>Three Gaussians plus uniform noise, the first distribution of the e-means playground. All three draw the same points and the same number of centroids (k is printed under each panel) and spend the same number of distance computations per pass. Lloyd and e-means start from the same random rows; since 70% of the points lie in the largest Gaussian, about 70% of their centroids start inside it and stay there, packed so tightly that they read as one disk. h-means allocates centroids in proportion to the loss, so the sparse noise region, where every point is far from its centroid, receives many more of them. The h-means panel looks fuller only because its centroids are spread out where each one is visible. The simulation runs in this tab.</p>
     <div id="sim-hero"></div>
     <p class="small muted">Two dimensions exaggerate the gap (the e-means laws were not fitted there, and faiss switches dead-cluster revival off at d ≤ 2); the measurements below on 96- to 784-dimensional data are the fair comparison.</p>
+    <p>With fewer centroids the same thing can be seen cell by cell. Each centroid owns the region of the plane closest to it, its Voronoi cell, and the k-means loss is the sum over cells of the squared distances to the centroid. The cells are tinted by their area. Lloyd and e-means keep most of their centroids inside the big Gaussian, where the cells are tiny, and leave a handful of huge cells over the noise, where every point is far from its centroid. h-means hands the noise many more centroids, so its cells are of more even size and the loss is lower. At this small k the hierarchical warm start costs about one extra pass, which the stat line shows. The checkbox turns the cells on in every simulation on this page and in the playground.</p>
+    <div id="sim-voronoi"></div>
   </section>
 
 
@@ -176,6 +178,8 @@ EMeans(n_clusters=4096, n_passes=5).fit(X)`}</code></pre>
     const vs = (a, b) => `<b>${pctBetter(a, b)}%</b>`;
     raceSim({ root: "sim-hero", gen: "vo_toy", n: 40000, K: 800, T: 5, iters: 25, trainers: [L, Object.assign({}, E, { name: "e-means, 5 passes" }), Object.assign({}, H, { name: "h-means, 5 passes" })],
       summary: (tr, te, r, v) => `h-means: ${vs(tr[2], tr[1])} lower train loss and ${vs(te[2], te[1])} lower held-out loss than <span class="e">e-means</span> at the same ${v.T} passes, ${pctBetter(tr[2], tr[0])}% lower than <span class="l">Lloyd</span> after ${v.iters} iterations.` });
+    raceSim({ root: "sim-voronoi", gen: "vo_toy", n: 10000, K: 40, T: 5, iters: 25, voronoi: true, trainers: [L, Object.assign({}, E, { name: "e-means, 5 passes" }), Object.assign({}, H, { name: "h-means, 5 passes" })],
+      summary: (tr, te, r, v) => `h-means: ${vs(tr[2], tr[1])} lower train loss than <span class="e">e-means</span> and ${pctBetter(tr[2], tr[0])}% lower than <span class="l">Lloyd</span> with k = ${r.K}.` });
     raceSim({ root: "sim-warm", gen: "syn_gmm_zipf", n: 20000, K: 256, T: 5, trainers: [
         { name: "random rows", color: "--emeans", make: (X, n, K, T, s) => new HmeansTrainer(X, n, K, T, s, { warmStart: false, hartiganEma: false, emaFrac: 1 }) },
         { name: "warm start, uniform allocation", color: "--sculley", make: (X, n, K, T, s) => new HmeansTrainer(X, n, K, T, s, { allocation: "uniform", hartiganEma: false, emaFrac: 1 }) },

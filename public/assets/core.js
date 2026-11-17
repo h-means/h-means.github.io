@@ -195,7 +195,28 @@ function fitCanvas(cv) { const r = cv.getBoundingClientRect(), s = Math.min(2, w
 function bounds(X, n) { let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity; for (let i = 0; i < n; i++) { const x = X[2 * i], y = X[2 * i + 1]; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; } const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, half = Math.max(x1 - x0, y1 - y0) / 2 * 1.04; return { cx, cy, half }; }
 function pointsLayer(X, n, w, h, b, color) { const off = document.createElement("canvas"); off.width = w; off.height = h; const g = off.getContext("2d"); g.fillStyle = color; g.globalAlpha = n > 60000 ? 0.35 : 0.55; const s = w / (2 * b.half), step = Math.max(1, Math.floor(n / 60000));
   for (let i = 0; i < n; i += step) { const px = (X[2 * i] - b.cx) * s + w / 2, py = h / 2 - (X[2 * i + 1] - b.cy) * s; g.fillRect(px, py, 1.2, 1.2); } return off; }
-function drawPanel(cv, layer, C, K, b, color) { const g = cv.getContext("2d"), w = cv.width, h = cv.height; g.clearRect(0, 0, w, h); g.drawImage(layer, 0, 0); const s = w / (2 * b.half), r = K > 3000 ? 1.4 : K > 1000 ? 2 : 2.6, halo = K <= 3000;  // a white rim keeps packed centroids countable instead of merging into a solid disk
+// Voronoi cells of the centroids, rasterised with the jump flooding algorithm on a reduced grid (exact up to
+// a pixel or two). Each cell is tinted by its area, so the large cells that a method leaves in sparse regions
+// stand out, and the cell borders are drawn in the method colour.
+function voronoiLayer(C, K, b, w, h, color) {
+  const W = Math.min(w, 420), H = Math.round(W * h / w), N = W * H; const off = document.createElement("canvas"); off.width = W; off.height = H;
+  const s = W / (2 * b.half), sx = new Float32Array(K), sy = new Float32Array(K); let cur = new Int32Array(N).fill(-1), nxt = new Int32Array(N);
+  for (let j = 0; j < K; j++) { sx[j] = (C[2 * j] - b.cx) * s + W / 2; sy[j] = H / 2 - (C[2 * j + 1] - b.cy) * s; const px = Math.round(sx[j]), py = Math.round(sy[j]); if (px >= 0 && px < W && py >= 0 && py < H) cur[py * W + px] = j; }
+  let step = 1; while (step < Math.max(W, H)) step *= 2; step /= 2; const steps = []; for (; step >= 1; step /= 2) steps.push(step); steps.push(1);
+  for (const st of steps) {
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const p = y * W + x; let best = cur[p], bd = best >= 0 ? (sx[best] - x) ** 2 + (sy[best] - y) ** 2 : Infinity;
+      for (let dy = -st; dy <= st; dy += st) { const yy = y + dy; if (yy < 0 || yy >= H) continue; for (let dx = -st; dx <= st; dx += st) { const xx = x + dx; if (xx < 0 || xx >= W) continue; const q = cur[yy * W + xx]; if (q < 0 || q === best) continue; const d = (sx[q] - x) ** 2 + (sy[q] - y) ** 2; if (d < bd) { bd = d; best = q; } } }
+      nxt[p] = best; }
+    const t = cur; cur = nxt; nxt = t; }
+  const area = new Int32Array(K); for (let p = 0; p < N; p++) if (cur[p] >= 0) area[cur[p]]++;
+  const mean = N / K, img = off.getContext("2d").createImageData(W, H), d = img.data, rgb = parseColor(color);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const p = y * W + x, j = cur[p]; if (j < 0) continue; const edge = (x + 1 < W && cur[p + 1] !== j) || (y + 1 < H && cur[p + W] !== j);
+    const a = edge ? 0.55 : 0.04 + 0.3 * Math.min(1, area[j] / (6 * mean)); d[4 * p] = rgb[0]; d[4 * p + 1] = rgb[1]; d[4 * p + 2] = rgb[2]; d[4 * p + 3] = Math.round(255 * a); }
+  off.getContext("2d").putImageData(img, 0, 0); return off; }
+function parseColor(c) { const g = document.createElement("canvas").getContext("2d"); g.fillStyle = c; const h = g.fillStyle; return [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16)); }
+function drawPanel(cv, layer, C, K, b, color, voronoi) { const g = cv.getContext("2d"), w = cv.width, h = cv.height; g.clearRect(0, 0, w, h);
+  if (voronoi) { const v = voronoiLayer(C, K, b, w, h, color); g.imageSmoothingEnabled = true; g.drawImage(v, 0, 0, w, h); }
+  g.drawImage(layer, 0, 0); const s = w / (2 * b.half), r = K > 3000 ? 1.4 : K > 1000 ? 2 : K > 200 ? 2.6 : 3.5, halo = K <= 3000;  // a white rim keeps packed centroids countable instead of merging into a solid disk
   g.fillStyle = color; g.strokeStyle = "#fff"; g.lineWidth = 1;
   for (let j = 0; j < K; j++) { const px = (C[2 * j] - b.cx) * s + w / 2, py = h / 2 - (C[2 * j + 1] - b.cy) * s; g.beginPath(); g.arc(px, py, r, 0, 6.2832); g.fill(); if (halo) g.stroke(); } }
 

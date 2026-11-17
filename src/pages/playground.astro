@@ -32,6 +32,7 @@ import Base from "../layouts/Base.astro";
     <div class="ctl"><label for="lloyd">Lloyd iterations</label><input type="range" id="lloyd" min="5" max="50" value="25" /><span class="val" id="lloydVal">25</span></div>
     <div class="ctl"><label for="seed">Seed</label><input type="number" id="seed" value="0" min="0" max="9999" style="width:6ch" /></div>
     <div class="ctl"><label for="speed">Speed</label><input type="range" id="speed" min="1" max="4" value="2" /><span class="val" id="speedVal">live</span></div>
+    <div class="ctl"><label class="chk"><input type="checkbox" id="voronoi" /> Voronoi cells</label></div>
     <button class="btn" id="train">Train</button>
   </div>
 
@@ -86,7 +87,7 @@ function startRun() {
 function evalAll(r, force) { const nk = r.n * r.K; for (let m = 0; m < 3; m++) { const p = r.ops[m] / nk, tr = r.trainers[m]; if (!force && p < r.nextEval[m] && !tr.done) continue; if (!force && tr.done && r.curves[m].length && r.curves[m][r.curves[m].length - 1].final) continue;
     const train = meanLoss(r.X, r.sub, tr.C, r.K), test = meanLoss(r.Xt, r.nTest, tr.C, r.K); r.curves[m].push({ x: p, y: train, final: tr.done }); r.tcurves[m].push({ x: p, y: test }); r.nextEval[m] = Math.floor(p / r.evalEvery) * r.evalEvery + r.evalEvery; } }
 function drawAll(r) { const cvs = [$("cvL"), $("cvE"), $("cvH")], sts = [$("stL"), $("stE"), $("stH")]; const nk = r.n * r.K;
-  for (let m = 0; m < 3; m++) { drawPanel(cvs[m], r.layer, r.trainers[m].C, r.K, r.b, r.colors[m]); const c = r.curves[m], t = r.tcurves[m]; const lab = m === 0 ? r.trainers[0].label : m === 1 ? `pass ${Math.min(r.T, Math.floor(r.trainers[1].progress) + (r.trainers[1].done ? 0 : 1))} / ${r.T}` : r.trainers[2].label;
+  for (let m = 0; m < 3; m++) { drawPanel(cvs[m], r.layer, r.trainers[m].C, r.K, r.b, r.colors[m], $("voronoi").checked); const c = r.curves[m], t = r.tcurves[m]; const lab = m === 0 ? r.trainers[0].label : m === 1 ? `pass ${Math.min(r.T, Math.floor(r.trainers[1].progress) + (r.trainers[1].done ? 0 : 1))} / ${r.T}` : r.trainers[2].label;
     sts[m].innerHTML = c.length ? `train <b>${c[c.length - 1].y.toPrecision(4)}</b> · held-out <b>${t[t.length - 1].y.toPrecision(4)}</b><br>k = ${fmtInt(r.K)} centroids · ${(r.ops[m] / nk).toFixed(2)} passes of n·k · ${lab} · ${(r.cpu[m] / 1000).toFixed(1)} s` : ""; }
   const xMax = Math.max(r.iters, r.T + 0.5); const series = [];
   for (let m = 0; m < 3; m++) { series.push({ pts: r.curves[m], color: r.colors[m], dashed: false }); series.push({ pts: r.tcurves[m], color: r.colors[m], dashed: true }); }
@@ -114,6 +115,7 @@ function finish(r) { // final exact numbers on the full training set
   const sts = [$("stL"), $("stE"), $("stH")]; const nk = r.n * r.K; for (let m = 0; m < 3; m++) sts[m].innerHTML = `train <b>${tr[m].toPrecision(4)}</b> · held-out <b>${te[m].toPrecision(4)}</b><br>k = ${fmtInt(r.K)} centroids · ${(r.ops[m] / nk).toFixed(2)} passes of n·k · ${(r.cpu[m] / 1000).toFixed(1)} s compute`;
   $("train").textContent = "Train"; }
 $("train").addEventListener("click", startRun);
+$("voronoi").addEventListener("change", () => { if (run) drawAll(run); });
 window.addEventListener("resize", () => { if (run) { [$("cvL"), $("cvE"), $("cvH")].forEach(fitCanvas); fitCanvas($("cvC")); run.layer = pointsLayer(run.X, run.n, $("cvL").width, $("cvL").height, run.b, css("--muted")); drawAll(run); } });
 // initial frame: the data, before training
 (function initial() { const shape = $("shape").value, n = nFromSlider(+$("n").value), K = kFromSlider(+$("k").value), seed = +$("seed").value; const rows = GEN[shape](n, K, seed); const X = flatten(rows); const b = bounds(X, n);
